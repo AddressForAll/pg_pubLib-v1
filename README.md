@@ -20,16 +20,20 @@ of other projects, in the same database.
 ## Lib Organization
 
 Functions are grouped in thematic source-files to maintainability.
-Most of the thematic groups comes from PostgreSQL Documentation's "[Chapter 9. Functions and Operators](https://www.postgresql.org/docs/current/functions.html)". Others are inspired in "snippet classes".  
+Most of the thematic groups comes from PostgreSQL Documentation's "[Chapter 9. Functions and Operators](https://www.postgresql.org/docs/current/functions.html)". Others are inspired in "snippet classes".<!-- pending src/pubLib01py-string.sql-->
 
 Function group         | Labels | Inspiration
 -----------------------|--------------|------------
-(System) Administration  |  `admin`     |  [pg/docs/functions-admin](https://www.postgresql.org/docs/current/functions-admin.html)
-Aggregate  |  `agg`/`aggregate`     |  [pg/docs/functions-aggregate](https://www.postgresql.org/docs/current/functions-aggregate.html)
-GeoJSON  |  `geoJSON`     |  [PostGIS/GeoJSON](https://postgis.net/docs/ST_GeomFromGeoJSON.html)
-JSON  |  `json`/`jsonb`     |  [pg/docs/functions-json](https://www.postgresql.org/docs/current/functions-admin.html)
-PostGIS  |  `st`/`postGis`     |  [PostGIS/docs](https://postgis.net/docs/reference.html)
-String  |  `str`/`string`     |  [pg/docs/functions-string](https://www.postgresql.org/docs/current/functions-string.html)
+(System) [Administration](src/pubLib03-admin.sql)  |  `admin`     |  [pg/docs/functions-admin](https://www.postgresql.org/docs/current/functions-admin.html)
+[Aggregate](src/pubLib04-aggregate.sql)  |  `agg`/`aggregate`     |  [pg/docs/functions-aggregate](https://www.postgresql.org/docs/current/functions-aggregate.html)
+[Array](src/pubLib01-array.sql)  |  `array`     |  [pg/docs/functions-array](https://www.postgresql.org/docs/current/functions-array.html)
+[GeoJSON](src/pubLib06pgis-geoJSON.sql)  |  `geoJSON`     |  [PostGIS/GeoJSON](https://postgis.net/docs/ST_GeomFromGeoJSON.html)
+[JSON](src/pubLib03-json.sql)  |  `json`/`jsonb`     |  [pg/docs/functions-json](https://www.postgresql.org/docs/current/functions-admin.html)
+[PostGIS](src/pubLib05pgis-extraSRID.sql)  |  `st`/`postGis`     |  [PostGIS/docs](https://postgis.net/docs/reference.html)
+[String](src/pubLib01-string.sql)  |  `str`/`string`     |  [pg/docs/functions-string](https://www.postgresql.org/docs/current/functions-string.html)
+[Geohash](src/pubLib05pgis-geohash.sql) | `geohash`/`postGis` | [PostGIS/Geohash](https://postgis.net/docs/ST_GeoHash.html)
+
+Libs also labeled by "dependence level"; for example Array library has no dependence, is level 01; JSON depends on Array, is level 03; and GeoJSON library depends on JSON, is level 4.
 
 ## Installation
 
