@@ -46,9 +46,34 @@ END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
 -- ex. SELECT generate_geohashes('grade_id04');
 
+CREATE or replace FUNCTION geohash_distribution_reduce(
+  p_j jsonb,
+  prefix_erode int DEFAULT 1,
+  size_min int DEFAULT 1,
+  p_threshold int DEFAULT NULL -- conditional reducer
+)  RETURNS table (ghs text, n int) AS $f$
+ SELECT CASE
+        WHEN p_threshold IS NULL OR n<p_threshold THEN 
+         substr(ghs,1,CASE WHEN size>=size_min THEN size ELSE size_min END) 
+        ELSE ghs
+      END AS ghs,
+      SUM(n)::int AS n
+ FROM (
+   SELECT ghs, n::int n, length(ghs)-prefix_erode AS size
+   FROM  jsonb_each(p_j) t(ghs,n)
+ ) t
+ GROUP BY 1
+ ORDER BY 1
+$f$ LANGUAGE SQL IMMUTABLE;
+-- SELECT * FROM geohash_distribution_reduce( generate_geohashes('grade_id04_pts') );
+-- SELECT * FROM geohash_distribution_reduce( generate_geohashes('grade_id04_pts'), 22, 2);
+-- SELECT * FROM geohash_distribution_reduce( generate_geohashes('grade_id04_pts'), 1,1, 30 );
+
+
 CREATE or replace FUNCTION geohash_checkprefix(
   p_check text, p_prefixes text[]
 ) RETURNS text AS $f$
+  -- or, better, an ordering regex and simple comparison... Equivalent? 
   SELECT x
   FROM unnest(p_prefixes) t(x)
   WHERE p_check like (x||'%')
