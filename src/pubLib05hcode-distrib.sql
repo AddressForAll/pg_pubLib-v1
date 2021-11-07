@@ -243,9 +243,23 @@ CREATE or replace FUNCTION hcode_distribution_reduce(
        ) ) q
     WHERE p_heuristic=2 AND t.j IS NOT NULL
 
+       UNION ALL
+
+    SELECT q.hcode, q.n_items
+    FROM t, LATERAL (
+      SELECT * FROM hcode_distribution_reduce_raw(
+         t.j,
+         1,
+         p_size_min,
+         p_threshold,
+         p_threshold_sum
+       ) ) q
+    WHERE p_heuristic=3 AND t.j IS NOT NULL
+   
     ORDER BY 1
   ) tfull
 $f$ LANGUAGE SQL IMMUTABLE;
 
 -- SELECT q.key AS gid, value::int as n_items, ST_GeomFromGeoHash(q.key) as geom  
 -- FROM hcode_distribution_reduce( generate_geohashes('grade_id04_pts'), 2, 1, 500, 5000, 2) t(x), LATERAL jsonb_each(x) q;
+-- .. FROM hcode_distribution_reduce( generate_geohashes('grade_id04_pts'), 2, 1, 500, 5000, 3) t(x), LATERAL jsonb_each(x) q;
