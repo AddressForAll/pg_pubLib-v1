@@ -94,30 +94,6 @@ $f$ LANGUAGE PLpgSQL IMMUTABLE;
 -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Distribution analytics-functions:
 
-CREATE or replace FUNCTION hcode_distribution_reduce(
-  p_j jsonb,
-  p_erode int DEFAULT 1,
-  size_min int DEFAULT 1,
-  p_threshold int DEFAULT NULL -- conditional reducer
-)  RETURNS table (hcode text, n int) AS $f$
- SELECT CASE
-        WHEN p_threshold IS NULL OR n<p_threshold THEN
-         substr(hcode,1,CASE WHEN size>=size_min THEN size ELSE size_min END)
-        ELSE hcode
-      END AS hcode,
-      SUM(n)::int AS n
- FROM (
-   SELECT hcode, n::int n, length(hcode)-p_erode AS size
-   FROM  jsonb_each(p_j) t(hcode,n)
- ) t
- GROUP BY 1
- ORDER BY 1
-$f$ LANGUAGE SQL IMMUTABLE;
--- SELECT * FROM hcode_distribution_reduce( generate_hcodees('grade_id04_pts') );
--- SELECT * FROM hcode_distribution_reduce( generate_hcodees('grade_id04_pts'), 22, 2);
--- SELECT * FROM hcode_distribution_reduce( generate_hcodees('grade_id04_pts'), 1,1, 30 );
-
-
 CREATE or replace FUNCTION hcode_distribution_kpis(p_j jsonb) RETURNS jsonb AS $f$
   -- Key Performance Indicators (KPIs) for distribution analysis
   SELECT jsonb_build_object(
@@ -132,6 +108,10 @@ CREATE or replace FUNCTION hcode_distribution_kpis(p_j jsonb) RETURNS jsonb AS $
     )
   FROM  jsonb_each(p_j) t(hcode,n) -- unnest key-value pairs preserving the datatype of values.
 $f$ LANGUAGE SQL;
+
+-- -- -- -- -- -- -- -- -- -- -- -- --
+-- -- -- -- -- -- -- -- -- -- -- -- --
+-- Distribution analytics-report functions:
 
 CREATE or replace FUNCTION hcode_distribution_format(
   p_j jsonb,
@@ -149,13 +129,18 @@ CREATE or replace FUNCTION hcode_distribution_format(
   FROM  scan , (SELECT SUM(n::int) tot FROM scan) t2
 $f$ LANGUAGE SQL;
 
-CREATE or replace FUNCTION geohash_distribution_reduce_raw(
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Distribution analytic-rebuild functions:
+
+CREATE or replace FUNCTION hcode_distribution_reduce_raw(
   p_j jsonb,
   p_left_erode int DEFAULT 1,
   p_size_min int DEFAULT 1,
-  p_threshold int DEFAULT NULL,    -- conditional reducer
-  p_threshold_sum int DEFAULT NULL -- conditional backtracking
-)  RETURNS table (hcode text, n int, j JSONb) AS $f$
+  p_threshold int DEFAULT NULL,     -- conditional reducer
+  p_threshold_sum int DEFAULT NULL, -- conditional backtracking
+  p_percentile float DEFAULT 0.5    -- fraction of percentile (default 0.5 for median) 
+)  RETURNS table (hcode text, n_items int, mdn_items int, n_keys int, j JSONb) AS $f$
 WITH preproc AS (
  SELECT CASE
         WHEN p_threshold IS NULL OR n<p_threshold THEN
@@ -163,6 +148,8 @@ WITH preproc AS (
         ELSE hcode
       END AS hcode,
       SUM(n)::int AS n,
+      percentile_disc(0.5) WITHIN GROUP (ORDER BY n) AS mdn_items,
+      COUNT(*) AS n_keys,
       jsonb_object_agg(hcode,n) as backup
  FROM (
    SELECT hcode, n::int n, length(hcode)-p_left_erode AS size
@@ -171,25 +158,27 @@ WITH preproc AS (
  GROUP BY 1
 )
 
-  SELECT hcode,n, NULL as j
+  SELECT hcode, n, mdn_items, n_keys, NULL as j
   FROM preproc
   WHERE p_threshold_sum IS NULL OR n<p_threshold_sum
 
   UNION
   -- below for use in https://en.wikipedia.org/wiki/Backtracking
-  SELECT hcode||'*', n, backup
+  SELECT hcode||'*', n, mdn_items, n_keys, backup
   FROM preproc
   WHERE p_threshold_sum IS NOT NULL AND n>=p_threshold_sum
 
   ORDER BY 1
 $f$ LANGUAGE SQL IMMUTABLE;
+
 -- Exemples without backtracking:
---  SELECT * FROM geohash_distribution_reduce_raw( generate_geohashes('grade_id04_pts') );
---  SELECT * FROM geohash_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 22, 2);
---  SELECT * FROM geohash_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 1,1, 30 );
---  SELECT * FROM geohash_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 1,1, 300 );
+--  SELECT * FROM hcode_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 22, 2);
+--  SELECT * FROM hcode_distribution_reduce_raw( generate_geohashes('grade_id04_pts') );
+--  SELECT * FROM hcode_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 1, 1, 30 );
+--  SELECT * FROM hcode_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 1, 1, 300 );
 -- Exemple with backtracking:
---  SELECT * FROM geohash_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 2,1, 500, 5000 );
+--  SELECT hcode, n_items, mdn_items, n_keys FROM hcode_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 3, 1, 500, 5000 );
+--  SELECT * FROM hcode_distribution_reduce_raw( generate_geohashes('grade_id04_pts'), 2, 1, 500, 5000 );
 
 -- ...Next:
 --   1. develop heuristic for geohash_distribution_reduce_balanced() RETURNS JSONb, for threshold-balanced distribuition.
