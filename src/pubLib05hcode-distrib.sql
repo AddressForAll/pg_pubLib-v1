@@ -17,12 +17,13 @@
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Check prefix in a set of hcode prefixes:
 
-CREATE or replace FUNCTION hcode_prefixset_parse(
- p_prefixes text[]
-) RETURNS text AS $f$  -- ret a regex.
+CREATE or replace FUNCTION hcode_prefixset_parse( p_prefixes text[] ) RETURNS text AS $f$  -- ret a regex.
  SELECT string_agg(x,'|')
- FROM unnest(p_prefixes) t(x)
- ORDER BY length(x) desc, x
+ FROM (
+   SELECT *
+   FROM unnest(p_prefixes) t1(x)
+   ORDER BY length(x) DESC, x
+ ) t2
 $f$ LANGUAGE SQL;
 
 CREATE or replace FUNCTION hcode_prefixset_element(
@@ -43,6 +44,19 @@ CREATE or replace FUNCTION hcode_prefixset_element(
  SELECT (regexp_match(p_check, p_prefixeset_regex))[1]
 $f$ LANGUAGE SQL IMMUTABLE;
 
+CREATE or replace FUNCTION hcode_prefixset_isin(
+  p_check text,           -- hcode to be checked (if its prefix is in prefix set)
+  p_prefixeset_regex text -- obtained from prefix set by hcode_prefixset_parse()
+) RETURNS boolean AS $wrap$
+  SELECT p_check ~ p_prefixeset_regex;
+$wrap$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION hcode_prefixset_element_slower(
+  p_check text,     -- hcode to be checked (if its prefix is in prefix set)
+  p_prefixes text[] -- the prefix set
+) RETURNS text AS $wrap$ -- obly to show how to use, and use in ASSERTs and benchmarks.
+  SELECT hcode_prefixset_element( p_check, hcode_prefixset_parse(p_prefixes) )
+$wrap$ LANGUAGE SQL IMMUTABLE;
 
 -- -- -- -- -- -- -- -- -- -- -- -- --
 -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -139,7 +153,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_raw(
   p_size_min int DEFAULT 1,
   p_threshold int DEFAULT NULL,     -- conditional reducer
   p_threshold_sum int DEFAULT NULL, -- conditional backtracking
-  p_percentile float DEFAULT 0.5    -- fraction of percentile (default 0.5 for median) 
+  p_percentile float DEFAULT 0.5    -- fraction of percentile (default 0.5 for median)
 )  RETURNS table (hcode text, n_items int, mdn_items int, n_keys int, j JSONb) AS $f$
 WITH preproc AS (
  SELECT CASE
@@ -232,22 +246,3 @@ CREATE or replace FUNCTION hcode_distribution_reduce(
     ORDER BY 1
   ) tfull
 $f$ LANGUAGE SQL IMMUTABLE;
-
-
--------------------
--------------------
--- WRAP functions:
-
-CREATE or replace FUNCTION hcode_prefixset_isin(
-  p_check text,           -- hcode to be checked (if its prefix is in prefix set)
-  p_prefixeset_regex text -- obtained from prefix set by hcode_prefixset_parse()
-) RETURNS booelan AS $wrap$
-  SELECT p_check ~ p_prefixeset_regex;
-$wrap$ LANGUAGE SQL IMMUTABLE;
-
-CREATE or replace FUNCTION hcode_prefixset_element_slower(
-  p_check text,     -- hcode to be checked (if its prefix is in prefix set)
-  p_prefixes text[] -- the prefix set
-) RETURNS text AS $wrap$ -- obly to show how to use, and use in ASSERTs and benchmarks.
-  SELECT hcode_prefixset_element( p_check, hcode_prefixset_parse(p_prefixes) )
-$wrap$ LANGUAGE SQL IMMUTABLE;
