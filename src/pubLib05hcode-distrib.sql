@@ -186,6 +186,54 @@ $f$ LANGUAGE SQL IMMUTABLE;
 --   2. develop heuristic for geohash_distribution_reduce_balanced() RETURNS JSONb, for unbalanced distribuition.
 --   3. develop heuristic for geohash_distribution_reduce() RETURNS JSONb, for n-key reduction.
 
+CREATE or replace FUNCTION hcode_distribution_reduce(
+  p_j jsonb,
+  p_left_erode int DEFAULT 1,
+  p_size_min int DEFAULT 1,
+  p_threshold int DEFAULT NULL,    -- conditional reducer
+  p_threshold_sum int DEFAULT NULL, -- conditional backtracking
+  p_heuristic int DEFAULT 1   -- algorithm options
+)  RETURNS JSONb AS $f$
+  WITH t AS (
+    SELECT *
+    FROM hcode_distribution_reduce_raw( p_j, p_left_erode, p_size_min, p_threshold, p_threshold_sum )
+  )
+  SELECT jsonb_object_agg(hcode, n_items)
+  FROM (
+    SELECT hcode, n_items FROM t
+    WHERE j IS NULL
+
+    UNION ALL
+
+    SELECT q.hcode, q.n_items
+    FROM t, LATERAL (
+      SELECT * FROM hcode_distribution_reduce_raw(
+         t.j,
+         p_left_erode - 1,
+         p_size_min,
+         p_threshold,
+         p_threshold_sum
+       ) ) q
+    WHERE p_heuristic=1 AND t.j IS NOT NULL
+
+    UNION ALL
+
+    SELECT q.hcode, q.n_items
+    FROM t, LATERAL (
+      SELECT * FROM hcode_distribution_reduce_raw(
+         t.j,
+         p_left_erode - 1,
+         p_size_min,
+         round(p_threshold*0.85)::int,
+         round(p_threshold_sum*0.85)::int
+       ) ) q
+    WHERE p_heuristic=2 AND t.j IS NOT NULL
+
+    ORDER BY 1
+  ) tfull
+$f$ LANGUAGE SQL IMMUTABLE;
+
+
 -------------------
 -------------------
 -- WRAP functions:
