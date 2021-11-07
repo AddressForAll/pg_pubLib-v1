@@ -246,3 +246,6 @@ CREATE or replace FUNCTION hcode_distribution_reduce(
     ORDER BY 1
   ) tfull
 $f$ LANGUAGE SQL IMMUTABLE;
+
+-- SELECT q.key AS gid, value::int as n_items, ST_GeomFromGeoHash(q.key) as geom  
+-- FROM hcode_distribution_reduce( generate_geohashes('grade_id04_pts'), 2, 1, 500, 5000, 2) t(x), LATERAL jsonb_each(x) q;
