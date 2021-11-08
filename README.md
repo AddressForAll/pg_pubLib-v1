@@ -24,14 +24,15 @@ Most of the thematic groups comes from PostgreSQL Documentation's "[Chapter 9. F
 
 Function group         | Labels | Inspiration
 -----------------------|--------------|------------
-(System) [Administration](src/pubLib03-admin.sql)  |  `admin`     |  [pg/docs/functions-admin](https://www.postgresql.org/docs/current/functions-admin.html)
-[Aggregate](src/pubLib04-aggregate.sql)  |  `agg`/`aggregate`     |  [pg/docs/functions-aggregate](https://www.postgresql.org/docs/current/functions-aggregate.html)
-[Array](src/pubLib01-array.sql)  |  `array`     |  [pg/docs/functions-array](https://www.postgresql.org/docs/current/functions-array.html)
-[GeoJSON](src/pubLib06pgis-geoJSON.sql)  |  `geoJSON`     |  [PostGIS/GeoJSON](https://postgis.net/docs/ST_GeomFromGeoJSON.html)
-[JSON](src/pubLib03-json.sql)  |  `json`/`jsonb`     |  [pg/docs/functions-json](https://www.postgresql.org/docs/current/functions-admin.html)
-[PostGIS](src/pubLib05pgis-extraSRID.sql)  |  `st`/`postGis`     |  [PostGIS/docs](https://postgis.net/docs/reference.html)
-[String](src/pubLib01-string.sql)  |  `str`/`string`     |  [pg/docs/functions-string](https://www.postgresql.org/docs/current/functions-string.html)
-[Geohash](src/pubLib05pgis-geohash.sql) | `geohash`/`postGis` | [PostGIS/Geohash](https://postgis.net/docs/ST_GeoHash.html)
+(System) [Administration](docs/admin.md) [src](src/pubLib03-admin.sql)  |  `admin`     |  [pg/docs/functions-admin](https://www.postgresql.org/docs/current/functions-admin.html)
+[Aggregate](docs/aggregate.md) [src](src/pubLib04-aggregate.sql)  |  `agg`/`aggregate`     |  [pg/docs/functions-aggregate](https://www.postgresql.org/docs/current/functions-aggregate.html)
+[Array](docs/array.md) [src](src/pubLib01-array.sql)  |  `array`     |  [pg/docs/functions-array](https://www.postgresql.org/docs/current/functions-array.html)
+[GeoJSON](docs/pgis-geoJSON.md) [src](src/pubLib06pgis-geoJSON.sql)  |  `geoJSON`     |  [PostGIS/GeoJSON](https://postgis.net/docs/ST_GeomFromGeoJSON.html)
+[JSON](docs/json.md) [src](src/pubLib03-json.sql)  |  `json`/`jsonb`     |  [pg/docs/functions-json](https://www.postgresql.org/docs/current/functions-admin.html)
+[PostGIS](docs/pgis-extraSRID.md) [src](src/pubLib05pgis-extraSRID.sql)  |  `st`/`postGis`     |  [PostGIS/docs](https://postgis.net/docs/reference.html)
+[String](docs/string.md) [src](src/pubLib01-string.sql)  |  `str`/`string`     |  [pg/docs/functions-string](https://www.postgresql.org/docs/current/functions-string.html)
+[HCodes](docs/hcode-distrib.md) [src](src/pubLib05hcode-distrib.sql) | `hcode`/`distrib` |  (Hierarchical or) [Natural Codes](http://addressforall.org/_foundations/art1.pdf)
+[Geohash](docs/pgis-geohash.md) [src](src/pubLib06pgis-geohash.sql) | `geohash`/`postGis` | [PostGIS/Geohash](https://postgis.net/docs/ST_GeoHash.html)
 
 Libs also labeled by "dependence level"; for example Array library has no dependence, is level 01; JSON depends on Array, is level 03; and GeoJSON library depends on JSON, is level 4.
 
