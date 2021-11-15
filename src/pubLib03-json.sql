@@ -1,16 +1,30 @@
 
 CREATE or replace FUNCTION  jsonb_objslice(
-    key text, j jsonb, rename text default null
+    key text, j jsonb, rename text default NULL
 ) RETURNS jsonb AS $f$
     SELECT COALESCE( jsonb_build_object( COALESCE(rename,key) , j->key ), '{}'::jsonb )
-$f$ LANGUAGE SQL IMMUTABLE;  -- complement is f(key text[], j jsonb, rename text[])
+$f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
-  IS 'Get the key as encapsulated object, with same or changing name.'
+  IS 'Get the key as encapsulated object, with same or changing name. Prefer subtract keys or jsonb_path_query() when valid'
 ;
-
-----
-
-
+CREATE or replace FUNCTION  jsonb_objslice(
+    keys text[], j jsonb, renames text[] default NULL
+) RETURNS jsonb AS $f$
+    SELECT COALESCE( jsonb_object_agg(COALESCE(rename,key),j->key),   '{}'::jsonb )
+    FROM (SELECT unnest(keys), unnest(renames)) t(key,rename)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
+  IS 'Get the keys as encapsulated object, with same or changing names.'
+;
+CREATE or replace FUNCTION  jsonb_objslice(
+    keypath jsonpath, j jsonb, keyname text
+) RETURNS jsonb AS $f$
+    SELECT COALESCE( jsonb_build_object(keyname,j_0), '{}'::jsonb )
+    FROM jsonb_path_query_first(j, keypath) t(j_0)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
+  IS 'Get the first path-result as keyname-result object.'
+;
 
 --- JSONb  functions  ---
 
