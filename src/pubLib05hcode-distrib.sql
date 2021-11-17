@@ -163,7 +163,7 @@ WITH preproc AS (
       END AS hcode,
       SUM(n)::int AS n,
       percentile_disc(0.5) WITHIN GROUP (ORDER BY n) AS mdn_items,
-      COUNT(*) AS n_keys,
+      COUNT(*)::int AS n_keys,
       jsonb_object_agg(hcode,n) as backup
  FROM (
    SELECT hcode, n::int n, length(hcode)-p_left_erode AS size
