@@ -213,14 +213,13 @@ $f$ LANGUAGE SQL IMMUTABLE;
 --   3. develop heuristic for geohash_distribution_reduce() RETURNS jsonB, for n-key reduction.
 
 
--- função em construção, falta testar e aprimorar:
 CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
   p_j jsonB,
   p_left_erode int DEFAULT 1,
   p_size_min int DEFAULT 1,
-  p_threshold int DEFAULT NULL,    -- conditional reducer
+  p_threshold int DEFAULT NULL,     -- conditional reducer
   p_threshold_sum int DEFAULT NULL, -- conditional backtracking
-  p_heuristic int DEFAULT 1,   -- algorithm options
+  p_heuristic int DEFAULT 1,        -- algorithm options
   ctrl_recursions smallint DEFAULT 1
 )  RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j jsonB) AS $f$
   DECLARE
@@ -236,12 +235,13 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
           '%L::jsonB, %s, %s, %s, %s',
           p_j::text, p_left_erode::text, p_size_min::text, p_threshold::text, p_threshold_sum::text
       );
+
       lst_heuristic := CASE p_heuristic
-         -- p_left_erode                  p_size_min                 p_threshold                  p_threshold_sum
+         -- 1.p_left_erode                  2.p_size_min                 3.p_threshold                  4.p_threshold_sum
 
          -- H1. heuristica básica:
          WHEN 1 THEN format($$
-	    %s - 1,                       %s,                        %s,                           %s
+            %s - 1,                       %s,                        %s,                           %s
          $$, p_left_erode::text, p_size_min::text, p_threshold::text, p_threshold_sum::text)
 
          -- H2. básica com redução dos thresholds:
@@ -256,23 +256,37 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
          END;
 
       RETURN QUERY EXECUTE format($$
-          WITH t AS (
-	      SELECT * FROM hcode_distribution_reduce_pre_raw( %s )
-	   )
+          WITH t AS ( SELECT * FROM hcode_distribution_reduce_pre_raw(%1$s) )
 
-	    SELECT  *  FROM t
-	    WHERE t.j IS NULL
+            SELECT hcode, SUM(n_items) AS n_items, round(AVG(mdn_items))::int AS mdn_items, SUM(n_keys) AS n_keys, NULL::jsonB as j
+            FROM (
+              -- Accepted rows:
+              SELECT  *
+              FROM t
+              WHERE t.j IS NULL AND (%5$s IS NULL OR n_items>=%5$s)
 
-	    UNION ALL
+              UNION ALL
 
-	    SELECT q.* FROM t,
-	     LATERAL (   SELECT * FROM hcode_distribution_reduce_recursive_raw( t.j, %s, %s, (%s+1)::smallint )   ) q
-	    WHERE t.j IS NOT NULL
+              -- Erode more (but can fail with no p_threshold_sum backtrack) and joins with accepted rows:
+              SELECT *
+              FROM hcode_distribution_reduce_recursive_raw(
+                ( SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS NULL AND n_items<%5$s ),
+                %2$s, %3$s, (%4$s+1)::smallint
+              )
+            ) t2
+            GROUP BY hcode
+
+            UNION ALL
+
+      	    SELECT q.* FROM t,
+      	     LATERAL (   SELECT * FROM hcode_distribution_reduce_recursive_raw( t.j, %2$s, %3$s, (%4$s+1)::smallint )   ) q
+      	    WHERE t.j IS NOT NULL
          $$,
-         lst_pre,
-         lst_heuristic,
-         p_heuristic::text,
-         ctrl_recursions::text
+         lst_pre,              -- %$1
+         lst_heuristic,        -- %$2
+         p_heuristic::text,    -- %$3
+         ctrl_recursions::text,-- %$4
+         p_threshold::text     -- %5$
         );
       END IF;
 END;
