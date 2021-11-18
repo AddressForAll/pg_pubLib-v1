@@ -63,6 +63,28 @@ $wrap$ LANGUAGE SQL IMMUTABLE;
 -- Distribution-generative functions:
 
 CREATE or replace FUNCTION geocode_distribution_generate(
+   p_relation  text, -- 'or something as (SELECT *  FROM t LIMIT 10)'
+   p_geocode_size   integer -- 0 or NULL is full
+) RETURNS jsonB AS $f$
+DECLARE
+  q text;
+  ret jsonB;
+BEGIN
+  q := $$
+  SELECT jsonb_object_agg( hcode,n )
+  FROM (
+    SELECT substring(hcode,1,%s) AS hcode, COUNT(*) n
+    FROM %s t(hcode)
+    GROUP BY 1
+    ORDER BY 1
+  ) scan
+  $$;
+  EXECUTE format( q, p_geocode_size, p_relation) INTO ret;
+  RETURN ret;
+END;
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+
+CREATE or replace FUNCTION geocode_distribution_generate(
    -- geocode is a subclass of hcode.
    p_tabname  text,
    p_ispoint  boolean  DEFAULT false,
@@ -190,71 +212,6 @@ $f$ LANGUAGE SQL IMMUTABLE;
 --   2. develop heuristic for geohash_distribution_reduce_balanced() RETURNS jsonB, for unbalanced distribuition.
 --   3. develop heuristic for geohash_distribution_reduce() RETURNS jsonB, for n-key reduction.
 
--- TESTE DIDATICO, NAO USAR SERIAMENTE:
-CREATE or replace FUNCTION hcode_distribution_reduce_LIXO(
-  p_j jsonB,
-  p_left_erode int DEFAULT 1,
-  p_size_min int DEFAULT 1,
-  p_threshold int DEFAULT NULL,    -- conditional reducer
-  p_threshold_sum int DEFAULT NULL, -- conditional backtracking
-  p_heuristic int DEFAULT 1   -- algorithm options
-)  RETURNS jsonB AS $f$
-  WITH t AS (
-    SELECT *
-    FROM hcode_distribution_reduce_pre_raw( p_j, p_left_erode, p_size_min, p_threshold, p_threshold_sum )
-  )
-  SELECT jsonb_object_agg(hcode, n_items)
-  FROM (
-    SELECT hcode, n_items FROM t
-    WHERE j IS NULL
-
-    UNION ALL
-
-    SELECT q.hcode, q.n_items
-    FROM t, LATERAL (
-      SELECT * FROM hcode_distribution_reduce_LIXO(
-         t.j,
-         p_left_erode - 1,
-         p_size_min,
-         p_threshold,
-         p_threshold_sum
-       ) ) q
-    WHERE p_heuristic=1 AND t.j IS NOT NULL
-
-    UNION ALL
-
-    SELECT q.hcode, q.n_items
-    FROM t, LATERAL (
-      SELECT * FROM hcode_distribution_reduce_LIXO(
-         t.j,
-         p_left_erode - 1,
-         p_size_min,
-         round(p_threshold*0.85)::int,
-         round(p_threshold_sum*0.85)::int
-       ) ) q
-    WHERE p_heuristic=2 AND t.j IS NOT NULL
-
-       UNION ALL
-
-    SELECT q.hcode, q.n_items
-    FROM t, LATERAL (
-      SELECT * FROM hcode_distribution_reduce_LIXO(
-         t.j,
-         1,
-         p_size_min,
-         p_threshold,
-         p_threshold_sum
-       ) ) q
-    WHERE p_heuristic=3 AND t.j IS NOT NULL
-
-    ORDER BY 1
-  ) tfull
-$f$ LANGUAGE SQL IMMUTABLE;
-
--- SELECT q.key AS gid, value::int as n_items, ST_GeomFromGeoHash(q.key) as geom
--- FROM hcode_distribution_reduce_LIXO( generate_geohashes('grade_id04_pts'), 2, 1, 500, 5000, 2) t(x), LATERAL jsonb_each(x) q;
--- .. FROM hcode_distribution_reduce_LIXO( generate_geohashes('grade_id04_pts'), 2, 1, 500, 5000, 3) t(x), LATERAL jsonb_each(x) q;
-
 
 -- função em construção, falta testar e aprimorar:
 CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
@@ -320,7 +277,9 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
       END IF;
 END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
-
+-- e.g. for QGIS:
+-- SELECT , hcode || ' ' || n_items AS name, ST_GeomFromGeoHash(replace(hcode,'','')) AS geom
+-- FROM hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('grade_id04_pts',true), 2, 1, 500, 5000, 2);
 
 CREATE or replace FUNCTION hcode_distribution_reduce(
   p_j             jsonB,             -- 1. input pairs {$hcode:$n_items}
