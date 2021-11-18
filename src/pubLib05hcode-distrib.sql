@@ -214,51 +214,58 @@ $f$ LANGUAGE SQL IMMUTABLE;
 
 
 CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
-  p_j jsonB,
-  p_left_erode int DEFAULT 1,
-  p_size_min int DEFAULT 1,
-  p_threshold int DEFAULT NULL,     -- conditional reducer
-  p_threshold_sum int DEFAULT NULL, -- conditional backtracking
-  p_heuristic int DEFAULT 1,        -- algorithm options
-  ctrl_recursions smallint DEFAULT 1
+  p_j             jsonB,             -- 1. input pairs {$hcode:$n_items}
+  p_left_erode    int DEFAULT 1,     -- 2. number of charcters to drop from left to right
+  p_size_min      int DEFAULT 1,     -- 3. minimal size of hcode
+  p_threshold     int DEFAULT NULL,  -- 4. conditional reducer
+  p_threshold_sum int DEFAULT NULL,  -- 5. conditional backtracking
+  p_heuristic     int DEFAULT 1,     -- 6. algorithm options 1-6, zero is no recursion.
+  ctrl_recursions smallint DEFAULT 1 -- 7. recursion counter
 )  RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j jsonB) AS $f$
   DECLARE
     lst_heuristic text;
     lst_pre       text;
   BEGIN
+
    IF  COALESCE(p_heuristic,0)=0 OR ctrl_recursions>5 THEN --  OR p_heuristic>3
       RETURN QUERY
         SELECT * FROM
         hcode_distribution_reduce_pre_raw( p_j, p_left_erode, p_size_min, p_threshold, p_threshold_sum );
+
    ELSE
       lst_pre := format(
           '%L::jsonB, %s, %s, %s, %s',
           p_j::text, p_left_erode::text, p_size_min::text, p_threshold::text, p_threshold_sum::text
       );
 
-      lst_heuristic := CASE p_heuristic
-         -- 1.p_left_erode                  2.p_size_min                 3.p_threshold                  4.p_threshold_sum
-
-         -- H1. heuristica básica:
-         WHEN 1 THEN format($$
-            %s - 1,                       %s,                        %s,                           %s
-         $$, p_left_erode::text, p_size_min::text, p_threshold::text, p_threshold_sum::text)
-
-         -- H2. básica com redução dos thresholds:
-         WHEN 2 THEN format($$
-            %s - 1,                       %s,                        round(%s*0.85)::int,         round(%s*0.85)::int
-         $$, p_left_erode::text, p_size_min::text, p_threshold::text, p_threshold_sum::text)
-
-         -- H3. variação da básica com erosão sempre unitária:
-         WHEN 3 THEN format($$
-            1,                            %s,                       %s,                           %s
-         $$, p_size_min::text, p_threshold::text, p_threshold_sum::text)
-         END;
+      lst_heuristic := format(
+        CASE p_heuristic
+          --   2.p_left_erode                3.p_size_min              4.p_threshold                 5.p_threshold_sum
+          WHEN 1 THEN -- H01. heuristica básica:
+           $$  %5$s - 1,                     %2$s,                      %3$s,                         %4$s  $$
+          WHEN 2 THEN -- H02. básica com redução dos thresholds:
+           $$  %5$s - 1,                     %2$s,                      round(%3$s*0.85)::int,       round(%4$s*0.85)::int  $$
+          WHEN 3 THEN -- H03. variação da básica com erosão unitária:
+           $$  1,                            %2$s,                      %3$s,                         %4$s   $$
+          WHEN 4 THEN -- H04. básica com redução dos thresholds e erosão unitária:
+           $$  1,                            %2$s,                      round(%3$s*0.85)::int,       round(%4$s*0.85)::int  $$
+          WHEN 5 THEN -- H05. heuristica básica com erosão constante:
+           $$  %1$s,                         %2$s,                      %3$s,                         %4$s  $$
+          ELSE        -- H06. básica com redução dos thresholds e erosão constante:
+           $$  %1$s,                         %2$s,                      round(%3$s*0.85)::int,       round(%4$s*0.85)::int  $$
+        END,
+        p_left_erode::text,                  p_size_min::text,          p_threshold::text,            p_threshold_sum::text,
+        iif(p_size_min<=1,p_size_min+1,p_size_min)::text
+      );
 
       RETURN QUERY EXECUTE format($$
           WITH t AS ( SELECT * FROM hcode_distribution_reduce_pre_raw(%1$s) )
 
-            SELECT hcode, SUM(n_items) AS n_items, round(AVG(mdn_items))::int AS mdn_items, SUM(n_keys) AS n_keys, NULL::jsonB as j
+            SELECT hcode,
+                   SUM(n_items)::int AS n_items,
+                   round(AVG(mdn_items))::int AS mdn_items,
+                   SUM(n_keys)::int AS n_keys,
+                   NULL::jsonB as j
             FROM (
               -- Accepted rows:
               SELECT  *
@@ -273,27 +280,29 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
                 ( SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS NULL AND n_items<%5$s ),
                 %2$s, %3$s, (%4$s+1)::smallint
               )
+
+              UNION ALL
+
+              -- Backtracking non-accepted rows:
+        	    SELECT q.* FROM t,
+        	     LATERAL (   SELECT * FROM hcode_distribution_reduce_recursive_raw( t.j, %2$s, %3$s, (%4$s+1)::smallint )   ) q
+        	    WHERE t.j IS NOT NULL
             ) t2
-            GROUP BY hcode
-
-            UNION ALL
-
-      	    SELECT q.* FROM t,
-      	     LATERAL (   SELECT * FROM hcode_distribution_reduce_recursive_raw( t.j, %2$s, %3$s, (%4$s+1)::smallint )   ) q
-      	    WHERE t.j IS NOT NULL
+            GROUP BY hcode ORDER BY hcode
          $$,
          lst_pre,              -- %$1
-         lst_heuristic,        -- %$2
-         p_heuristic::text,    -- %$3
-         ctrl_recursions::text,-- %$4
+         lst_heuristic,        -- %$2 = p2 left_erode, p3 size_min, p4 threshold, p5 threshold_sum
+         p_heuristic::text,    -- %$3 = p6
+         ctrl_recursions::text,-- %$4 = p7
          p_threshold::text     -- %5$
         );
       END IF;
 END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
--- e.g. for QGIS:
--- SELECT , hcode || ' ' || n_items AS name, ST_GeomFromGeoHash(replace(hcode,'','')) AS geom
--- FROM hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('grade_id04_pts',true), 2, 1, 500, 5000, 2);
+-- e.g. BeloHorizonte:   hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('tmp_lixo2',7), 2, 1, 800, 8000, 3)
+-- e.g. IBGE grid for QGIS:
+--  SELECT hcode as gid, hcode || ' ' || n_items AS name, ST_GeomFromGeoHash(replace(hcode,'','')) AS geom
+--  FROM hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('grade_id04_pts',true), 2, 1, 500, 5000, 2);
 
 CREATE or replace FUNCTION hcode_distribution_reduce(
   p_j             jsonB,             -- 1. input pairs {$hcode:$n_items}
@@ -301,7 +310,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce(
   p_size_min      int DEFAULT 1,     -- 3. minimal size of hcode
   p_threshold     int DEFAULT NULL,  -- 4. conditional reducer
   p_threshold_sum int DEFAULT NULL,  -- 5. conditional backtracking
-  p_heuristic     int DEFAULT 1      -- 6. algorithm options 1-3, zero is no recursion.
+  p_heuristic     int DEFAULT 1      -- 6. algorithm options 1-6, zero is no recursion.
 )  RETURNS jsonB AS $wrap$
   SELECT jsonb_object_agg(hcode, n_items)
   FROM hcode_distribution_reduce_recursive_raw($1,$2,$3,$4,$5,$6)
@@ -323,7 +332,7 @@ CREATE or replace FUNCTION hcode_signature_reduce_pre_raw(
   p_percentile float DEFAULT 0.5    -- fraction of percentile (default 0.5 for median)
 )  RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j jsonB) AS $f$
 
-WITH 
+WITH
 j_each AS (
   SELECT hcode, n::int n, 5-p_left_erode AS size
   FROM  jsonb_each(p_j) t(hcode,n)
