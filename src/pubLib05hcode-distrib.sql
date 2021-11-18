@@ -292,3 +292,117 @@ CREATE or replace FUNCTION hcode_distribution_reduce(
   SELECT jsonb_object_agg(hcode, n_items)
   FROM hcode_distribution_reduce_recursive_raw($1,$2,$3,$4,$5,$6)
 $wrap$ LANGUAGE SQL IMMUTABLE;
+
+
+
+-- Função em teste, buscam reduzir em até 10 geohashes
+
+--Exemplo:
+--SELECT * FROM hcode_signature_reduce(geocode_distribution_generate('grade_id04_pts',true), null, 2, .7,1);
+--SELECT * FROM hcode_signature_reduce_recursive_raw(geocode_distribution_generate('grade_id04_pts',true), null, 2, .7,1);
+
+
+CREATE or replace FUNCTION hcode_signature_reduce_pre_raw(
+  p_j jsonB,
+  p_left_erode int DEFAULT 1,
+  p_size_min int DEFAULT 1,
+  p_percentile float DEFAULT 0.5    -- fraction of percentile (default 0.5 for median)
+)  RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j jsonB) AS $f$
+
+WITH 
+j_each AS (
+  SELECT hcode, n::int n, 5-p_left_erode AS size
+  FROM  jsonb_each(p_j) t(hcode,n)
+),
+perc AS (
+  SELECT percentile_disc(p_percentile) WITHIN GROUP (ORDER BY n) as mdn_items
+  FROM j_each
+),
+preproc AS (
+  SELECT CASE
+        WHEN n<=(SELECT mdn_items FROM perc) THEN
+         substr(hcode,1,CASE WHEN size>=p_size_min THEN size ELSE p_size_min END)
+        ELSE hcode
+      END AS hcode,
+      SUM(n)::int AS n,
+      (SELECT mdn_items FROM perc) AS mdn_items,
+      COUNT(*)::int AS n_keys,
+      jsonb_object_agg(hcode,n) as backup
+  FROM j_each
+  GROUP BY 1
+)
+
+  SELECT hcode, n, mdn_items, n_keys, backup
+  FROM preproc
+  ORDER BY 1
+$f$ LANGUAGE SQL IMMUTABLE;
+
+
+CREATE or replace FUNCTION hcode_signature_reduce_recursive_raw(
+  p_j jsonB,
+  p_left_erode int DEFAULT 1,
+  p_size_min int DEFAULT 1,
+  p_percentile    real DEFAULT 0.75,
+  p_heuristic int DEFAULT 1,   -- algorithm options
+  ctrl_recursions smallint DEFAULT 0
+)  RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j jsonB) AS $f$
+  DECLARE
+    lst_heuristic text;
+    lst_pre       text;
+    ghs_len int;
+    len int;
+  BEGIN
+   len := jsonb_object_length(p_j);
+
+   -- incremonto de ctrl_recursions implica na erosão de 1 caracter do geohash
+   IF  COALESCE(p_heuristic,0)=0 OR ctrl_recursions>4 OR len <= 10 THEN
+      RETURN QUERY
+        SELECT * FROM
+        hcode_signature_reduce_pre_raw( p_j, ctrl_recursions::int, p_size_min, p_percentile );
+   ELSE
+      lst_pre := format(
+          '%L::jsonB, %s, %s, %s',
+          p_j::text, ctrl_recursions::text, p_size_min::text, p_percentile::text
+      );
+      lst_heuristic := CASE p_heuristic
+         -- p_left_erode                  p_size_min                 p_percentile
+
+         -- H1. heurística básica:
+         WHEN 1 THEN format($$
+	    %s,                       %s,                        %s
+         $$, ctrl_recursions::text, p_size_min::text, p_percentile::text)
+
+         -- H3. variação da básica com erosão sempre unitária:
+         WHEN 3 THEN format($$
+            1,                            %s,                       %s
+         $$, p_size_min::text, p_percentile::text)
+         END;
+
+      RETURN QUERY EXECUTE format($$
+          WITH t AS (
+	      SELECT jsonb_object_agg(hcode,n_items) AS j FROM hcode_signature_reduce_pre_raw( %s )
+	   )
+
+	    SELECT q.* FROM t,
+	     LATERAL ( SELECT * FROM hcode_signature_reduce_recursive_raw( t.j, %s, %s, (%s+1)::smallint ) ) q
+         $$,
+         lst_pre,
+         lst_heuristic,
+         p_heuristic::text,
+         ctrl_recursions::text
+        );
+      END IF;
+END;
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+
+
+CREATE or replace FUNCTION hcode_signature_reduce(
+  p_j             jsonB,             -- 1. input pairs {$hcode:$n_items}
+  p_left_erode    int  DEFAULT 1,    -- 2. number of charcters to drop from left to right
+  p_size_min      int  DEFAULT 1,    -- 3. minimal size of hcode
+  p_percentile    real DEFAULT 0.75, -- 4.
+  p_heuristic     int  DEFAULT 1     -- 5. algorithm options 1-3, zero is no recursion.
+) RETURNS jsonB AS $wrap$
+  SELECT jsonb_object_agg(hcode, n_items)
+  FROM hcode_signature_reduce_recursive_raw($1,$2,$3,$4,$5)
+$wrap$ LANGUAGE SQL IMMUTABLE;
