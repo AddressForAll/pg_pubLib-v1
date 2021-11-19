@@ -136,7 +136,7 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jso
 $f$ language SQL IMMUTABLE;
 
 
-CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) RETURNS jsonb[] AS $f$
+CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) RETURNS text AS $f$
  SELECT CASE opt 
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input)
