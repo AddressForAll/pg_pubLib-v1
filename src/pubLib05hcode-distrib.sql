@@ -299,7 +299,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
       END IF;
 END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
--- e.g. BeloHorizonte:   hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('tmp_lixo2',7), 2, 1, 800, 8000, 3)
+-- e.g. BeloHorizonte:   hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('tmp_lixo2',7), 1, 2, 750, 8000, 3) 
 -- e.g. IBGE grid for QGIS:
 --  SELECT hcode as gid, hcode || ' ' || n_items AS name, ST_GeomFromGeoHash(replace(hcode,'','')) AS geom
 --  FROM hcode_distribution_reduce_recursive_raw(geocode_distribution_generate('grade_id04_pts',true), 2, 1, 500, 5000, 2);
