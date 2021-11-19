@@ -53,7 +53,7 @@ RETURNS text LANGUAGE 'plpgsql' AS $f$
       sql := format($$
         SELECT volat_file_write(
                 %L,
-                %s( jsonb_build_object('type','FeatureCollection', 'features', gj) )::text
+                jsonb_pretty_lines( jsonb_build_object('type','FeatureCollection', 'features', gj), %s)
              )
         FROM (
           SELECT jsonb_agg( %s ) AS gj
@@ -61,7 +61,7 @@ RETURNS text LANGUAGE 'plpgsql' AS $f$
         ) t3
        $$,
        p_file,
-       CASE p_pretty_opt WHEN 1 THEN 'jsonb_pretty' WHEN 2 THEN 'jsonb_pretty_lines' ELSE '' END,
+       p_pretty_opt::text,
        sql_pre, sql_tablename,
        CASE WHEN p_cols IS NULL OR p_cols~'::jsonb?$' THEN ''
             ELSE ', LATERAL (SELECT '||p_cols||') t2'
