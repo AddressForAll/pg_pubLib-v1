@@ -140,6 +140,14 @@ CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) 
  SELECT CASE opt 
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input)
-   WHEN 2  THEN regexp_replace(j_input::text, '\{"type": ?"(?=[PL])', E'\n{"type": "', 'g')  -- GeoJSON lines
+   WHEN 2  THEN regexp_replace(j_input::text, '\{"type": ?"(?=[PL])', E'\n{"type": "', 'g')  -- GeoJSON
+   END
+$f$ language SQL IMMUTABLE;
+
+CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RETURNS text AS $f$
+ SELECT CASE opt 
+   WHEN 0  THEN j_input::text
+   WHEN 1  THEN jsonb_pretty(j_input::jsonb)
+   WHEN 2  THEN regexp_replace(j_input::text, '\{"type": ?"(?=[PL])', E'\n{"type": "', 'g')  -- GeoJSON
    END
 $f$ language SQL IMMUTABLE;
