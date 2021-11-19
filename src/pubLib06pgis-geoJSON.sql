@@ -4,8 +4,11 @@
  */
 
 CREATE extension IF NOT EXISTS postgis;
+-- GeoJSON complements:
 
-CREATE or replace FUNCTION write_geojson_Features(
+
+
+CREATE or replace FUNCTION write_geoJSONb_Features(
   sql_tablename text, -- ex. 'vw_grid_ibge_l1' or 'SELECT * FROM t WHERE cond'
   p_file text, -- ex. '/tmp/grid_ibge100km.geojson'
   sql_geom text DEFAULT 't1.geom', -- sql using t1 as alias for geom, eg. ST_Transform(t1.geom,4326)
@@ -72,11 +75,9 @@ RETURNS text LANGUAGE 'plpgsql' AS $f$
       RETURN msg;
   END
 $f$;
-COMMENT ON FUNCTION write_geojson_Features
-  IS 'run file_write() dynamically to save specified relation as GeoJSON FeatureCollection.'
+COMMENT ON FUNCTION write_geojsonb_Features
+  IS 'run file_write() dynamically to save specified relation as GeoJSONb FeatureCollection.'
 ;
-
--- GeoJSON complements:
 
 CREATE or replace FUNCTION geojson_readfile_headers(
     f text,   -- absolute path and filename
