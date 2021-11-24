@@ -5,9 +5,9 @@
 
 CREATE extension IF NOT EXISTS postgis;
 
--- IBGE Albers, SRID number convention in Project DigitalGuard-BR:
-INSERT into spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext)
-VALUES (
+INSERT INTO spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) VALUES
+   -- -- -- --
+(  -- IBGE Albers, SRID number convention in Project DigitalGuard-BR:
   952019,
   'BR:IBGE',
   52019,
@@ -29,12 +29,9 @@ VALUES (
   PARAMETER["false_northing",10000000],
   UNIT["Meter",1]
  ]$$
-)
-ON CONFLICT DO NOTHING;
-
--- IGAC MAGNA-SIRGAS / Origen-Nacional:
-INSERT into spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext)
-VALUES (
+),
+  -- -- -- --
+( -- Grid of Colombia, IGAC MAGNA-SIRGAS / Origen-Nacional:
   9377,
   'CO:IGAC',
   9377,
