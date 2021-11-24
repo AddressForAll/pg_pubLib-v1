@@ -29,6 +29,7 @@ CREATE or replace FUNCTION volat_file_write(
   msg text DEFAULT 'Ok',
   append boolean DEFAULT false
 ) RETURNS text AS $f$
+  SELECT pg_catalog.pg_file_unlink(file);
   -- solves de PostgreSQL problem of the "LAZY COALESCE", as https://stackoverflow.com/a/42405837/287948
   SELECT msg ||'. Content bytes '|| CASE WHEN append THEN 'appended:' ELSE 'writed:' END
          ||  pg_catalog.pg_file_write(file,fcontent,append)::text
