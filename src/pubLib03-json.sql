@@ -26,6 +26,10 @@ COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
   IS 'Get the first path-result as keyname-result object.'
 ;
 
+CREATE or replace FUNCTION jsonb_object_keys_asarray(j jsonb) RETURNS text[] AS $f$
+  SELECT  array_agg(x) FROM jsonb_object_keys(j) t(x)
+$f$ LANGUAGE sql IMMUTABLE;           
+
 --- JSONb  functions  ---
 
 CREATE or replace FUNCTION jsonb_object_length( jsonb ) RETURNS int AS $f$
