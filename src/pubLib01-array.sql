@@ -57,9 +57,9 @@ $wrap$ LANGUAGE SQL IMMUTABLE;
 
 ----
 
-CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
-  SELECT array_agg(value::text::bigint) jsonb_array_elements($1)
-$f$ LANGUAGE SQL IMMUTABLE;
+--CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
+  --SELECT array_agg(value::text::bigint) jsonb_array_elements($1)
+--$f$ LANGUAGE SQL IMMUTABLE;
 
 CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
   SELECT array_agg(value::text::bigint) FROM jsonb_array_elements($1)
