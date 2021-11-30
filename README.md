@@ -38,8 +38,4 @@ Libs also labeled by "dependence level"; for example Array library has no depend
 
 ## Installation
 
-Edit makefile of your project to run each `psql $(pg_uri)/$(pg_db) < pubLib$(i).sql` in the correct order. For example any `pubLib02-*.sql` must run before `pubLib03-*.sql`, but same order like `pubLib03-admin.sql` and `pubLib03-json.sql` can be run in any order &mdash; by convention we adopt the alphabetic order, so use the `ls pubLib*.sql` order.
-
-RECOMMENDATION: to install (in a database) only the used modules.
-
-RATIONALE: each database in each project can use a different set of pubLib functions. It is good practice to avoid "namespace pollution" with unused functions, so, the pubLib modularization makes a reasonable partition over this "pollution risk".
+See [docs/install.md](/docs/install.md).
