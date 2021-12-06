@@ -26,6 +26,10 @@ CREATE or replace FUNCTION yaml_to_jsonb(p_yaml text) RETURNS jsonb AS $f$
     return json.dumps( yaml.safe_load(p_yaml) )
 $f$ LANGUAGE PLpython3u IMMUTABLE;
 
+CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text) RETURNS text AS $f$
+    import yaml
+    return yaml.dump(yaml.load( p_jsonb ))
+$f$ LANGUAGE PLpython3u IMMUTABLE;
 -- jsonb_to_yaml?
 
 -------
