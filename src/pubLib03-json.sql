@@ -7,6 +7,7 @@ $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
   IS 'Get the key as encapsulated object, with same or changing name. Prefer subtract keys or jsonb_path_query() when valid'
 ;
+
 CREATE or replace FUNCTION  jsonb_objslice(
     keys text[], j jsonb, renames text[] default NULL
 ) RETURNS jsonb AS $f$
@@ -16,6 +17,7 @@ $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
   IS 'Get the keys as encapsulated object, with same or changing names.'
 ;
+
 CREATE or replace FUNCTION  jsonb_objslice(
     keypath jsonpath, j jsonb, keyname text
 ) RETURNS jsonb AS $f$
@@ -30,15 +32,13 @@ CREATE or replace FUNCTION jsonb_object_keys_asarray(j jsonb) RETURNS text[] AS 
   SELECT  array_agg(x) FROM jsonb_object_keys(j) t(x)
 $f$ LANGUAGE sql IMMUTABLE;           
 
---- JSONb  functions  ---
 
-DROP FUNCTION jsonb_object_length(jsonb);
+--- JSONb  functions  ---
 
 CREATE or replace FUNCTION jsonb_object_length( jsonb ) RETURNS int AS $f$
   -- Integer because never expect a big JSON, with more tham 10^9 or 2147483647 items
   SELECT count(*)::int FROM jsonb_object_keys($1)  -- faster tham jsonb_each()
 $f$ language SQL IMMUTABLE;
-
 
 CREATE or replace FUNCTION jsonb_rename(
   js JSONB, nmold text, nmnew text
@@ -140,7 +140,6 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jso
      ) t
    ) END
 $f$ language SQL IMMUTABLE;
-
 
 CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) RETURNS text AS $f$
  SELECT CASE opt 
