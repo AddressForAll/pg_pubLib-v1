@@ -32,6 +32,8 @@ $f$ LANGUAGE sql IMMUTABLE;
 
 --- JSONb  functions  ---
 
+DROP FUNCTION jsonb_object_length(jsonb);
+
 CREATE or replace FUNCTION jsonb_object_length( jsonb ) RETURNS int AS $f$
   -- Integer because never expect a big JSON, with more tham 10^9 or 2147483647 items
   SELECT count(*)::int FROM jsonb_object_keys($1)  -- faster tham jsonb_each()

@@ -37,7 +37,7 @@ $f$ LANGUAGE PLpython3u IMMUTABLE;
 CREATE or replace FUNCTION jsonb_mustache_render(
   tpl text,  -- input Mustache template
   i jsonb,   -- input content
-  partials_path text DEFAULT '/var/gits/_dg/preserv/src/maketemplates'
+  partials_path text DEFAULT '/var/gits/_dg/preserv/src/maketemplates/'
 ) RETURNS text AS $f$
   import chevron
   import json
