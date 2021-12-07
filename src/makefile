@@ -10,7 +10,6 @@ all:
 	psql $(pg_uri) < pubLib01py-string.sql
 	@echo "... Installing functions level 03:"
 	psql $(pg_uri) < pubLib03-json.sql
-	psql $(pg_uri) < pubLib03-json.sql
 	psql $(pg_uri) < pubLib03-admin.sql
 	@echo "... Installing functions level 04:"
 	psql $(pg_uri) < pubLib04-aggregate.sql
