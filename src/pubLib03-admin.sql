@@ -95,15 +95,17 @@ COMMENT ON FUNCTION iif
 
 -- -- -- -- -- -- -- -- -- -- -- --
 -- Other system's helper functions
-
-CREATE or replace FUNCTION rel_description(
-  p_relname text, p_schemaname text DEFAULT NULL
-) RETURNS text AS $f$
-SELECT obj_description((CASE
-  WHEN strpos($1, '.')>0 THEN $1
-  WHEN $2 IS NULL THEN 'public.'||$1
-  ELSE $2||'.'||$1
-       END)::regclass, 'pg_class');
+CREATE or replace FUNCTION rel_columns(
+ p_relname text, p_schemaname text DEFAULT NULL
+) RETURNS text[] AS $f$
+   SELECT --attrelid::regclass AS tbl,  atttypid::regtype  AS datatype
+        array_agg(attname::text ORDER  BY attnum)
+   FROM   pg_attribute
+   WHERE  attrelid = (CASE
+             WHEN strpos($1, '.')>0 THEN $1
+             WHEN $2 IS NULL THEN 'public.'||$1
+             ELSE $2||'.'||$1
+          END)::regclass
+   AND    attnum > 0
+   AND    NOT attisdropped
 $f$ LANGUAGE SQL;
-COMMENT ON FUNCTION rel_description(text,text)
- IS E'Alternative shortcut to obj_description(). \nSee https://stackoverflow.com/a/12736192/287948';
