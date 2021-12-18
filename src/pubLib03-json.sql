@@ -33,6 +33,23 @@ CREATE or replace FUNCTION jsonb_object_keys_asarray(j jsonb) RETURNS text[] AS 
 $f$ LANGUAGE sql IMMUTABLE;           
 
 
+-- -- -- -- -- -- -- -- -- -- --
+-- Extends native functions:
+
+CREATE or replace FUNCTION jsonb_strip_nulls(
+  p_input jsonb,      -- any input
+  p_ret_empty boolean -- true for normal, false for ret null on empty
+) RETURNS jsonb AS $f$
+  SELECT CASE
+     WHEN p_ret_empty THEN x
+     WHEN x='{}'::JSONb THEN NULL
+     ELSE x END
+  FROM ( SELECT jsonb_strip_nulls(p_input) ) t(x)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION jsonb_strip_nulls(jsonb,boolean)
+  IS 'Extends jsonb_strip_nulls to return NULL instead empty';
+
+
 --- JSONb  functions  ---
 
 CREATE or replace FUNCTION jsonb_object_length( jsonb ) RETURNS int AS $f$
