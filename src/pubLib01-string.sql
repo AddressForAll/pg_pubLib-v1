@@ -2,6 +2,11 @@
 -- -- -- -- -- -- -- --
 -- Casts, str_to_something:
 
+CREATE or replace FUNCTION to_bigint(str text) RETURNS bigint as $f$
+  SELECT CASE WHEN s='' THEN NULL::int ELSE s::bigint END
+  FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s) 
+$f$ LANGUAGE SQL IMMUTABLE;
+
 CREATE or replace FUNCTION to_integer(str text) RETURNS int as $f$
   SELECT CASE WHEN s='' THEN NULL::int ELSE s::int END
   FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s) 
