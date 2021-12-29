@@ -1,15 +1,16 @@
+CREATE EXTENSION IF NOT EXISTS unaccent;
 
 -- -- -- -- -- -- -- --
 -- Casts, str_to_something:
 
 CREATE or replace FUNCTION to_bigint(str text) RETURNS bigint as $f$
   SELECT CASE WHEN s='' THEN NULL::int ELSE s::bigint END
-  FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s) 
+  FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s)
 $f$ LANGUAGE SQL IMMUTABLE;
 
 CREATE or replace FUNCTION to_integer(str text) RETURNS int as $f$
   SELECT CASE WHEN s='' THEN NULL::int ELSE s::int END
-  FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s) 
+  FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s)
 $f$ LANGUAGE SQL IMMUTABLE;
 
 -- -- -- -- -- -- -- --
@@ -41,7 +42,7 @@ CREATE or replace FUNCTION str_abbrev_minscore(
   -- SCORES CONVENCIONADOS: 'B'=bom = 7 a 9, 'R'=regular=4 a 6, 'F'=fraco = 0 a 3
   -- ou mudar?  1 e 2    Fraca (ou Péssima);  3 e 4 Ruim;  5 e 6 Regular,  7 e 8 Boa; 9 e 10 Ótima.
   SELECT CASE WHEN NOT(upper(unaccent(lexlabel)) ~ str_abbrev_regex(abbrev)) THEN
-     iif( upper(unaccent(name)) ~ str_abbrev_regex(abbrev), iif(old_score>'',old_score, 'R'), 'F'::text)
+     iif( upper(unaccent(name)) ~ str_abbrev_regex(abbrev), iif(old_score>'',old_score, 'R'::text), 'F'::text)
   ELSE COALESCE(old_score,'') END
 $f$ LANGUAGE SQL IMMUTABLE;
 -- Exemplos:

@@ -30,7 +30,7 @@ COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
 
 CREATE or replace FUNCTION jsonb_object_keys_asarray(j jsonb) RETURNS text[] AS $f$
   SELECT  array_agg(x) FROM jsonb_object_keys(j) t(x)
-$f$ LANGUAGE sql IMMUTABLE;           
+$f$ LANGUAGE sql IMMUTABLE;
 
 
 -- -- -- -- -- -- -- -- -- -- --
@@ -145,6 +145,10 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[] ) RETURNS jsonb AS $f$
  END
 $f$ LANGUAGE plpgsql IMMUTABLE;
 
+/* bug revisar:
+  ERROR:  a column definition list is required for functions returning "record"
+  LINE 9:        FROM array_fillto_duo($1,$2) t(a,b)
+
 CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jsonb[] AS $f$
  SELECT CASE
    WHEN $2 IS NULL THEN $1
@@ -157,9 +161,10 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jso
      ) t
    ) END
 $f$ language SQL IMMUTABLE;
+*/
 
 CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) RETURNS text AS $f$
- SELECT CASE opt 
+ SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input)
    WHEN 2  THEN regexp_replace(j_input::text, '\{"type": ?"(?=[PL])', E'\n{"type": "', 'g')  -- GeoJSON
@@ -167,7 +172,7 @@ CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) 
 $f$ language SQL IMMUTABLE;
 
 CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RETURNS text AS $f$
- SELECT CASE opt 
+ SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input::jsonb)
    WHEN 2  THEN regexp_replace(j_input::text, '\{"type": ?"(?=[PL])', E'\n{"type": "', 'g')  -- GeoJSON
