@@ -10,7 +10,8 @@ ini:
 	@echo " use make all"
 
 all:
-	@echo "... Installing functions levels 01 and 2:"
+	@echo "... Installing functions levels 00 to 02:"
+	psql $(pg_uri) < pubLib00-general.sql
 	psql $(pg_uri) < pubLib01-array.sql
 	psql $(pg_uri) < pubLib02-string.sql
 	psql $(pg_uri) < pubLib01py-string.sql
