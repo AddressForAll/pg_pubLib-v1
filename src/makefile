@@ -3,6 +3,12 @@ pg_uri_root =postgres://postgres@localhost
 pg_db       =test
 pg_uri      =$(pg_uri_root)/$(pg_db)
 
+
+ini:
+	@echo "---- making pubLib -----"
+	@echo " will change databse: $(pg_uri)"
+	@echo " use make all"
+
 all:
 	@echo "... Installing functions level 01:"
 	psql $(pg_uri) < pubLib01-array.sql
