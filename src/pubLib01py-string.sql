@@ -32,6 +32,11 @@ CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text) RETURNS text AS $f$
 $f$ LANGUAGE PLpython3u IMMUTABLE;
 -- jsonb_to_yaml?
 
+CREATE or replace FUNCTION file_exists(p_file text) RETURNS boolean AS $f$
+    import os
+    return os.path.isfile(p_file)
+$f$ LANGUAGE PLpython3u IMMUTABLE;
+
 -------
 
 CREATE or replace FUNCTION jsonb_mustache_render(
