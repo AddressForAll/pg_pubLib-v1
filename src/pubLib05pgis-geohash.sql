@@ -20,12 +20,13 @@ $f$ LANGUAGE SQL IMMUTABLE;
 CREATE or replace FUNCTION geohash_GeomMosaic(ghs_array text[])
 RETURNS TABLE(ghs text, lghs int, geom geometry) AS $f$
   WITH ghsgeom AS (
-    SELECT ghs, length(ghs) as lghs, ST_GeomFromGeoHash(ghs) AS geom
+    SELECT ghs, length(ghs) as lghs,
+           ST_SetSRID( ST_GeomFromGeoHash(ghs) , 4326) AS geom
     FROM unnest(ghs_array) t1(ghs)
   ),
   lghsgeom AS (
-      SELECT lghs, ST_UNION(geom) as ugeom
-      FROM ghsgeom GROUP BY 1 ORDER BY 1
+    SELECT lghs, ST_UNION(geom) as ugeom
+    FROM ghsgeom GROUP BY 1 ORDER BY 1
   )
     SELECT g.ghs, g.lghs, COALESCE(
          (SELECT ST_Difference(g.geom,ST_UNION(ugeom)) FROM lghsgeom WHERE lghs>g.lghs),
