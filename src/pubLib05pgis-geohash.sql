@@ -62,11 +62,30 @@ RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
             ELSE jsonb_build_object('lghs',lghs, 'val',ghs_set->ghs)
          END,
          geom
-  FROM (
-    SELECT * FROM geohash_GeomsMosaic( (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k)) )
-  ) t
+  FROM geohash_GeomsMosaic(  (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k))  )
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb)
   IS 'Wrap for geohash_GeomMosaic(text[]), adding a val column of jsonb-type from input key-value pairs.'
 ;
 -- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":{"x":12,"y":34},"7h2w":200,"7h2wju":{"x":55,"a":null},"6urz":null}'::jsonb);
+
+CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(ghs_set jsonB, opts jsonB)
+RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
+  SELECT ghs
+         , info || COALESCE( (SELECT jsonb_object_agg(
+                 CASE WHEN opt='density_km' THEN 'density' ELSE opt END,
+                 CASE opt
+                     WHEN 'area' THEN  ST_Area(geom,true)
+                     WHEN 'area_km' THEN ST_Area(geom,true)/1000000.0
+                     WHEN 'density' THEN ST_Area(geom,true)/(info->(opts->>'density'))::float
+                     WHEN 'density_km' THEN  (1/1000000.0)*ST_Area(geom,true)/(info->(opts->>'density_km'))::float
+                 END) -- \agg
+             FROM jsonb_object_keys(opts) t(opt)
+           ), '{}'::jsonb)
+         ,geom
+  FROM geohash_GeomsMosaic_jinfo(ghs_set)
+$wrap$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB)
+  IS 'Wrap for geohash_GeomsMosaic_jinfo, adding optional area and density values'
+;
+
