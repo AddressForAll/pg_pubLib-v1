@@ -43,12 +43,30 @@ COMMENT ON FUNCTION geohash_GeomsMosaic(text[])
 
 CREATE or replace FUNCTION geohash_GeomsMosaic(ghs_set jsonB)
 RETURNS TABLE(ghs text, lghs int, val text, geom geometry) AS $wrap$
-  SELECT ghs, lghs, ghs_set->ghs AS val, geom
+  SELECT ghs, lghs, ghs_set->>ghs AS val, geom
   FROM (
     SELECT * FROM geohash_GeomsMosaic( (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k)) )
   ) t
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION geohash_GeomsMosaic(jsonb)
-  IS 'Wrap for geohash_GeomMosaic(text[]), adding a val column from input key-value pairs.'
+  IS 'Wrap for geohash_GeomsMosaic(text[]), adding a val column of text-type from input key-value pairs.'
 ;
--- SELECT geohash_GeomMosaic('{"7h2":100,"7h2w":200,"7h2wju":150,"7h2wjv":200,"7h2wjx":30,"6urz":110}'::jsonb);
+-- SELECT * FROM geohash_GeomsMosaic('{"7h2":100,"7h2w":200,"7h2wju":150,"7h2wjv":200,"7h2wjx":30,"6urz":110}'::jsonb);
+
+CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(ghs_set jsonB)
+RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
+  SELECT ghs,
+         CASE jsonb_typeof(ghs_set->ghs)
+            WHEN 'null' THEN jsonb_build_object('lghs',lghs)
+            WHEN 'object' THEN (ghs_set->ghs) || jsonb_build_object('lghs',lghs)
+            ELSE jsonb_build_object('lghs',lghs, 'val',ghs_set->ghs)
+         END,
+         geom
+  FROM (
+    SELECT * FROM geohash_GeomsMosaic( (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k)) )
+  ) t
+$wrap$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb)
+  IS 'Wrap for geohash_GeomMosaic(text[]), adding a val column of jsonb-type from input key-value pairs.'
+;
+-- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":{"x":12,"y":34},"7h2w":200,"7h2wju":{"x":55,"a":null},"6urz":null}'::jsonb);
