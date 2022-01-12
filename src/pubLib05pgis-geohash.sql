@@ -89,6 +89,7 @@ RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
            ), '{}'::jsonb)
          ,geom
   FROM geohash_GeomsMosaic_jinfo(ghs_set,geom_mask)
+  WHERE ST_Area(geom,true) <> 0
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB,geometry)
   IS 'Wrap for geohash_GeomsMosaic_jinfo, adding optional area and density values'
