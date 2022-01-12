@@ -73,12 +73,12 @@ CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(ghs_set jsonB, opts jsonB)
 RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
   SELECT ghs
          , info || COALESCE( (SELECT jsonb_object_agg(
-                 CASE WHEN opt='density_km' THEN 'density' ELSE opt END,
+                 CASE WHEN substr(opt,1,7)='density' THEN (opts->>opt)||'_'||opt ELSE opt END,
                  CASE opt
-                     WHEN 'area' THEN  ST_Area(geom,true)
-                     WHEN 'area_km' THEN ST_Area(geom,true)/1000000.0
-                     WHEN 'density' THEN ST_Area(geom,true)/(info->(opts->>'density'))::float
-                     WHEN 'density_km' THEN  (1/1000000.0)*ST_Area(geom,true)/(info->(opts->>'density_km'))::float
+                     WHEN 'area' THEN     ST_Area(geom,true)
+                     WHEN 'area_km2' THEN  ST_Area(geom,true)/1000000.0
+                     WHEN 'density' THEN  (info->(opts->>opt))::float / ST_Area(geom,true)
+                     WHEN 'density_km2' THEN  1000000.0*(info->(opts->>opt))::float / ST_Area(geom,true)
                  END) -- \agg
              FROM jsonb_object_keys(opts) t(opt)
            ), '{}'::jsonb)
@@ -88,4 +88,4 @@ $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB)
   IS 'Wrap for geohash_GeomsMosaic_jinfo, adding optional area and density values'
 ;
-
+-- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":300,"7h2w":200,"7h2wju":245,"6urz":123}'::jsonb,'{"area":1,"density_km2":"val"}'::jsonb);
