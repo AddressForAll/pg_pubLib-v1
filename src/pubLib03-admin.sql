@@ -115,3 +115,37 @@ CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] A
      FROM UNNEST($1) WITH ORDINALITY t1(x,i)
    ) t2
 $f$ LANGUAGE SQL;
+
+
+CREATE or replace FUNCTION show_udfs(
+  p_schema_name text DEFAULT NULL,
+  p_name_like text DEFAULT '',
+  p_name_notlike text DEFAULT ''
+) RETURNS TABLE (
+  schema_name text,
+  name text,
+  language text,
+  arguments text,
+  return_type text,
+  definition text
+) AS $f$
+  SELECT
+    pg_namespace.nspname::text,
+    pg_proc.proname::text,
+    pg_language.lanname::text,
+    pg_get_function_arguments(pg_proc.oid)::text,
+    pg_type.typname::text,
+    CASE
+      WHEN pg_language.lanname = 'internal' then pg_proc.prosrc::text
+      ELSE pg_get_functiondef(pg_proc.oid)::text
+    END
+  FROM pg_proc
+    LEFT JOIN pg_namespace on pg_proc.pronamespace = pg_namespace.oid
+    LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
+    LEFT JOIN pg_type on pg_type.oid = pg_proc.prorettype
+  WHERE pg_namespace.nspname not in ('pg_catalog', 'information_schema')
+        AND CASE WHEN p_schema_name IS NOT NULL THEN p_schema_name=pg_namespace.nspname::text ELSE true END
+        AND CASE WHEN p_name_like>'' THEN pg_proc.proname::text iLIKE p_name_like ELSE true END
+        AND CASE WHEN p_name_notlike>'' THEN NOT(pg_proc.proname::text iLIKE p_name_notlike) ELSE true END        
+$f$ LANGUAGE SQL IMMUTABLE;
+-- SELECT name, language, arguments, return_type FROM show_udfs('public','%geohas%','st_%');
