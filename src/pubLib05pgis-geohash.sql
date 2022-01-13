@@ -74,24 +74,32 @@ COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,geometry)
 ;
 -- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":{"x":12,"y":34},"7h2w":200,"7h2wju":{"x":55,"a":null},"6urz":null}'::jsonb);
 
-CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(ghs_set jsonB, opts jsonB, geom_mask geometry DEFAULT null)
+CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(
+    ghs_set jsonB, opts jsonB,
+    geom_mask geometry DEFAULT null,
+    minimal_area float DEFAULT 1.0 -- precision of point and geohash-cell are not superior than 1 m2.
+)
 RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
   SELECT ghs
-         , info || COALESCE( (SELECT jsonb_object_agg(
+         ,info || COALESCE( 
+            (SELECT jsonb_object_agg(
                  CASE WHEN substr(opt,1,7)='density' THEN (opts->>opt)||'_'||opt ELSE opt END,
                  CASE opt
-                     WHEN 'area' THEN     ST_Area(geom,true)
-                     WHEN 'area_km2' THEN  ST_Area(geom,true)/1000000.0
-                     WHEN 'density' THEN  (info->(opts->>opt))::float / ST_Area(geom,true)
-                     WHEN 'density_km2' THEN  1000000.0*(info->(opts->>opt))::float / ST_Area(geom,true)
+                     WHEN 'area' THEN      l.area
+                     WHEN 'area_km2' THEN  l.area/1000000.0
+                     WHEN 'density' THEN  (info->(opts->>opt))::float / l.area
+                     WHEN 'density_km2' THEN  1000000.0*(info->(opts->>opt))::float / l.area
+                     ELSE null
                  END) -- \agg
-             FROM jsonb_object_keys(opts) t(opt)
-           ), '{}'::jsonb)
+             FROM jsonb_object_keys(opts) t(opt) WHERE opts is not null AND opts!='{}'::jsonb
+           ), -- \select
+           '{}'::jsonb  -- when opts is null or empty
+         ) -- \coalesce
          ,geom
-  FROM geohash_GeomsMosaic_jinfo(ghs_set,geom_mask)
-  WHERE ST_Area(geom,true) <> 0
+  FROM geohash_GeomsMosaic_jinfo(ghs_set,geom_mask), LATERAL (SELECT ST_Area(geom,true)) l(area)
+  WHERE l.area>minimal_area
 $wrap$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB,geometry)
+COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB,geometry,float)
   IS 'Wrap for geohash_GeomsMosaic_jinfo, adding optional area and density values'
 ;
--- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":300,"7h2w":200,"7h2wju":245,"6urz":123}'::jsonb,'{"area":1,"density_km2":"val"}'::jsonb);
+-- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":300,"7h2w":200,"7h2wju":245,"6urz":123,"7h2wju5222":1}'::jsonb, '{"area":1,"density_km2":"val"}'::jsonb);
