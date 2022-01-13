@@ -122,6 +122,7 @@ CREATE or replace FUNCTION show_udfs(
   p_name_like text DEFAULT '',
   p_name_notlike text DEFAULT ''
 ) RETURNS TABLE (
+  oid oid,
   schema_name text,
   name text,
   language text,
@@ -131,6 +132,7 @@ CREATE or replace FUNCTION show_udfs(
   comment text
 ) AS $f$
   SELECT
+    pg_proc.oid,
     pg_namespace.nspname::text,
     pg_proc.proname::text,
     pg_language.lanname::text,
@@ -140,7 +142,7 @@ CREATE or replace FUNCTION show_udfs(
       WHEN pg_language.lanname = 'internal' then pg_proc.prosrc::text
       ELSE pg_get_functiondef(pg_proc.oid)::text
     END,
-    shobj_description(pg_proc.oid)::text
+    obj_description(pg_proc.oid)::text
   FROM pg_proc
     LEFT JOIN pg_namespace on pg_proc.pronamespace = pg_namespace.oid
     LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
