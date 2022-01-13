@@ -127,7 +127,8 @@ CREATE or replace FUNCTION show_udfs(
   language text,
   arguments text,
   return_type text,
-  definition text
+  definition text,
+  comment text
 ) AS $f$
   SELECT
     pg_namespace.nspname::text,
@@ -138,7 +139,8 @@ CREATE or replace FUNCTION show_udfs(
     CASE
       WHEN pg_language.lanname = 'internal' then pg_proc.prosrc::text
       ELSE pg_get_functiondef(pg_proc.oid)::text
-    END
+    END,
+    shobj_description(pg_proc.oid)::text
   FROM pg_proc
     LEFT JOIN pg_namespace on pg_proc.pronamespace = pg_namespace.oid
     LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
