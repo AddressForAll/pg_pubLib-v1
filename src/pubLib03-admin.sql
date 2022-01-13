@@ -117,10 +117,11 @@ CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] A
 $f$ LANGUAGE SQL;
 
 
-CREATE or replace FUNCTION show_udfs(
+CREATE or replace FUNCTION show_UDF(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
-  p_name_notlike text DEFAULT ''
+  p_name_notlike text DEFAULT '',
+  p_oid oid DEFAULT NULL
 ) RETURNS TABLE (
   oid oid,
   schema_name text,
@@ -148,8 +149,13 @@ CREATE or replace FUNCTION show_udfs(
     LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
     LEFT JOIN pg_type on pg_type.oid = pg_proc.prorettype
   WHERE pg_namespace.nspname not in ('pg_catalog', 'information_schema')
-        AND CASE WHEN p_schema_name IS NOT NULL THEN p_schema_name=pg_namespace.nspname::text ELSE true END
-        AND CASE WHEN p_name_like>'' THEN pg_proc.proname::text iLIKE p_name_like ELSE true END
-        AND CASE WHEN p_name_notlike>'' THEN NOT(pg_proc.proname::text iLIKE p_name_notlike) ELSE true END        
+        AND CASE WHEN p_schema_name IS NOT NULL    THEN p_schema_name=pg_namespace.nspname::text ELSE true END
+        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN pg_proc.proname::text iLIKE p_name_like ELSE true END
+        AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(pg_proc.proname::text iLIKE p_name_notlike) ELSE true END
+        AND CASE WHEN p_oid IS NOT NULL THEN pg_proc.oid=p_oid ELSE true END
 $f$ LANGUAGE SQL IMMUTABLE;
--- SELECT name, language, arguments, return_type FROM show_udfs('public','%geohas%','st_%');
+COMMENT ON FUNCTION show_UDF
+  IS 'Show all information about an User Defined Function (UDF), by its OID, or listing all functions by LIKE filter.'
+;
+-- SELECT name, return_type, arguments FROM show_udf('public','%geohas%','st_%');
+-- SELECT name, return_type, comment FROM show_udf('public','show_UDF');
