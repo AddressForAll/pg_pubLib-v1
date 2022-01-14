@@ -130,6 +130,7 @@ CREATE or replace FUNCTION show_UDF(
   arguments text,
   return_type text,
   definition text,
+  prokind text,
   comment text
 ) AS $f$
   SELECT
@@ -142,6 +143,12 @@ CREATE or replace FUNCTION show_UDF(
     CASE
       WHEN pg_language.lanname = 'internal' then pg_proc.prosrc::text
       ELSE pg_get_functiondef(pg_proc.oid)::text
+    END,
+    CASE pg_proc.prokind
+       WHEN 'a' THEN 'agg'
+       WHEN 'w' THEN 'window'
+       WHEN 'p' THEN 'proc'
+       ELSE 'func'
     END,
     obj_description(pg_proc.oid)::text
   FROM pg_proc
@@ -159,3 +166,29 @@ COMMENT ON FUNCTION show_UDF
 ;
 -- SELECT name, return_type, arguments FROM show_udf('public','%geohas%','st_%');
 -- SELECT name, return_type, comment FROM show_udf('public','show_UDF');
+
+
+CREATE or replace FUNCTION show_UDF_simplified_signature(
+  p_schema_name text DEFAULT NULL,
+  p_name_like text DEFAULT '',
+  p_name_notlike text DEFAULT ''
+) RETURNS TABLE (
+  schema_name text,
+  name text,
+  simplified_signature text[]
+) AS $f$
+  SELECT routines.specific_schema, routines.routine_name,
+         array_agg(parameters.data_type ORDER BY parameters.ordinal_position) as simplified_signature
+  FROM information_schema.routines
+    LEFT JOIN information_schema.parameters ON routines.specific_name=parameters.specific_name
+  WHERE 
+        CASE WHEN COALESCE(p_schema_name,'') >''   THEN p_schema_name=routines.specific_schema  ELSE true END
+        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN routines.routine_name iLIKE p_name_like ELSE true END
+        AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(routines.routine_name iLIKE p_name_notlike) ELSE true END
+  GROUP BY 1, 2, routines.specific_name
+  ORDER BY routines.routine_name, routines.specific_name 
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION show_UDF_simplified_signature
+  IS 'Show name and simplified argument list about an User Defined Function (UDF), by its name or listing all functions by LIKE filter. Useful for namespace analyses'
+;
+-- SELECT * FROM show_UDF_simplified_signature('','%geohash%','st_%');
