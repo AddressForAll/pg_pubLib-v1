@@ -167,7 +167,7 @@ CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) 
  SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input)
-   WHEN 2  THEN regexp_replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), '[^^] ?\{"type": ?"(?=[FL])', E'\n{"type": "', 'g') || E'\n'  -- GeoJSON
+   WHEN 2  THEN regexp_replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), ' ?\{"type": "Feature", "geometry":', E'\n{"type": "Feature", "geometry":', 'g') || E'\n'  -- GeoJSON
    END
 $f$ language SQL IMMUTABLE;
 
@@ -175,6 +175,6 @@ CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RE
  SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input::jsonb)
-   WHEN 2  THEN regexp_replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), '[^^] ?\{"type": ?"(?=[FL])', E'\n{"type": "', 'g') || E'\n'  -- GeoJSON
+   WHEN 2  THEN regexp_replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), ' ?\{"type": "Feature", "geometry":', E'\n{"type": "Feature", "geometry":', 'g') || E'\n'  -- GeoJSON
    END
 $f$ language SQL IMMUTABLE;
