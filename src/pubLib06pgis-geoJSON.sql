@@ -69,7 +69,7 @@ CREATE or replace FUNCTION ST_AsGeoJSONb( -- ST_AsGeoJSON_complete
   p_id_as_int boolean default false
 ) RETURNS JSONb AS $f$
 -- Do ST_AsGeoJSON() adding id, crs, properties, name and title
-  SELECT ST_AsGeoJSON(p_geom,p_decimals,p_options)::jsonb
+  SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(p_geom,p_decimals,p_options)::jsonb)
        || CASE
           WHEN p_properties IS NULL OR jsonb_typeof(p_properties)!='object' THEN '{}'::jsonb
           ELSE jsonb_build_object('properties',p_properties)
