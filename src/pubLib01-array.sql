@@ -54,12 +54,15 @@ CREATE or replace FUNCTION array_last_butnot(
   SELECT array_last_butnot($1,array[$2])
 $wrap$ LANGUAGE SQL IMMUTABLE;
 
-
 ----
 
---CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
-  --SELECT array_agg(value::text::bigint) jsonb_array_elements($1)
---$f$ LANGUAGE SQL IMMUTABLE;
+CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
+  SELECT array_agg(value::text::bigint) FROM jsonb_array_elements(p_j)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION jsonb_to_bigints(jsonb)
+  IS 'Casts JSON array of non-floating numbers to SQL array of bigints.'
+;
+-- select x, x+1, pg_typeof(x) from unnest(jsonb_to_bigints('[-1,0,1,2,9223372036854775806]'::jsonb)) t(x);
 
 CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
   SELECT array_agg(value::text::bigint) FROM jsonb_array_elements($1)
@@ -192,7 +195,7 @@ $f$  LANGUAGE SQL IMMUTABLE;
 -----------
 
 
-/*
+/* for geocode lib
 to use array[array[k,v],...]::bigint[]   instead jsonb  ... no real optimization.
 
 CREATE or replace FUNCTION bigint2d_find( bigint[], bigint ) RETURNS bigint AS $f$
@@ -215,22 +218,22 @@ $f$ language SQL IMMUTABLE;
 
 -----
 
-
 CREATE or replace FUNCTION base36_encode(
-  -- adapted from https://gist.github.com/btbytes/7159902
+  -- for QRcode lib, adapted from https://gist.github.com/btbytes/7159902
   IN digits bigint -- positive
 ) RETURNS text AS $f$
-  DECLARE
-			chars char[] := ARRAY['0','1','2','3','4','5','6','7','8','9'
-  			,'A','B','C','D','E','F','G','H','I','J','K','L','M'
-  			,'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
-			ret text := '';
-			val bigint;
-  BEGIN
+DECLARE
+  chars char[] := ARRAY[
+	  '0','1','2','3','4','5','6','7','8','9'
+          ,'A','B','C','D','E','F','G','H','I','J','K','L','M'
+  	  ,'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+  ret text := '';
+  val bigint;
+BEGIN
   val := digits;
   WHILE val != 0 LOOP
-  	ret := chars[(val % 36)+1] || ret;
-  	val := val / 36;
+    ret := chars[(val % 36)+1] || ret;
+    val := val / 36;
   END LOOP;
   RETURN ret;
 END;
