@@ -163,8 +163,8 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jso
 $f$ language SQL IMMUTABLE;
 */
 
-/* LIXO??
 CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) RETURNS text AS $f$
+ -- jsonB input
  SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input)
@@ -172,9 +172,9 @@ CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) 
    WHEN 3  THEN replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'),' ','') || E'\n'  -- GeoJSON
    END
 $f$ language SQL IMMUTABLE;
-*/
 
 CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RETURNS text AS $f$
+ -- json input (not jsonB!) 
  SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input::jsonb)
