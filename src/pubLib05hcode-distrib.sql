@@ -64,7 +64,8 @@ $wrap$ LANGUAGE SQL IMMUTABLE;
 
 CREATE or replace FUNCTION geocode_distribution_generate(
    p_relation  text, -- 'or something as (SELECT *  FROM t LIMIT 10)'
-   p_geocode_size   integer -- 0 or NULL is full
+   p_geocode_size   integer, -- 0 or NULL is full
+   p_sum  boolean  DEFAULT false
 ) RETURNS jsonB AS $f$
 DECLARE
   q text;
@@ -73,13 +74,18 @@ BEGIN
   q := $$
   SELECT jsonb_object_agg( hcode,n )
   FROM (
-    SELECT substring(hcode,1,%s) AS hcode, COUNT(*) n
+    SELECT substring(hcode,1,%s) AS hcode, %s
     FROM %s t(hcode)
     GROUP BY 1
     ORDER BY 1
   ) scan
   $$;
-  EXECUTE format( q, p_geocode_size, p_relation) INTO ret;
+  EXECUTE format(
+    q,
+    p_geocode_size,
+    CASE WHEN p_sum THEN $$SUM((info->'npoints')::bigint) n$$ ELSE 'COUNT(*) n' END,
+    p_relation
+    ) INTO ret;
   RETURN ret;
 END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
@@ -90,7 +96,8 @@ CREATE or replace FUNCTION geocode_distribution_generate(
    p_ispoint  boolean  DEFAULT false,
    p_geom_col text     DEFAULT 'geom',
    p_geocode_size   integer  DEFAULT 5,
-   p_geocode_function text DEFAULT 'ST_Geohash'
+   p_geocode_function text DEFAULT 'ST_Geohash',
+   p_sum  boolean  DEFAULT false
 ) RETURNS jsonB AS $f$
 DECLARE
   q text;
@@ -99,13 +106,13 @@ BEGIN
   q := $$
   SELECT jsonb_object_agg( hcode,n )
   FROM (
-    SELECT  hcode, COUNT(*) n
+    SELECT  hcode,  %s
     FROM (
       SELECT
         %s(
           CASE WHEN %s THEN %s ELSE ST_PointOnSurface(%s) END
           ,%s
-        ) as hcode
+        ) as hcode %s
       FROM %s
     ) t2
     GROUP BY 1
@@ -114,10 +121,12 @@ BEGIN
   $$;
   EXECUTE format(
     q,
+    CASE WHEN p_sum THEN $$SUM((info->'npoints')::bigint) n$$ ELSE 'COUNT(*) n' END,
     p_geocode_function,
     CASE WHEN p_ispoint THEN 'true' ELSE 'false' END,
     p_geom_col, p_geom_col,
     p_geocode_size::text,
+    CASE WHEN p_sum THEN ', info' n$$ ELSE '' END,
     p_tabname
   ) INTO ret;
   RETURN ret;
