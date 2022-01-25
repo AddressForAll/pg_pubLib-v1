@@ -126,7 +126,7 @@ BEGIN
     CASE WHEN p_ispoint THEN 'true' ELSE 'false' END,
     p_geom_col, p_geom_col,
     p_geocode_size::text,
-    CASE WHEN p_sum THEN ', info' n$$ ELSE '' END,
+    CASE WHEN p_sum THEN ', info' ELSE '' END,
     p_tabname
   ) INTO ret;
   RETURN ret;
