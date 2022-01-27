@@ -173,9 +173,9 @@ CREATE or replace FUNCTION show_UDF_simplified_signature(
   p_name_like text DEFAULT '',
   p_name_notlike text DEFAULT ''
 ) RETURNS TABLE (
-  schema_name text,
-  name text,
-  simplified_signature text[]
+  schema_name information_schema.sql_identifier,
+  name information_schema.sql_identifier,
+  simplified_signature information_schema.character_data[]
 ) AS $f$
   SELECT routines.specific_schema, routines.routine_name,
          array_agg(parameters.data_type ORDER BY parameters.ordinal_position) as simplified_signature
