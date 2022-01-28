@@ -320,7 +320,7 @@ CREATE FUNCTION hcode_distribution_reduce_recursive_raw(
   hcode_parameters jsonb DEFAULT NULL, -- 4. hcode_distribution_parameters
   ctrl_recursions  smallint DEFAULT 1  -- 5. recursion counter
 ) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j jsonB) AS $wrap$
-   SELECT hcode_distribution_reduce_recursive_raw($1, $2, $3, (hcode_parameters->'p_threshold')::int, (hcode_parameters->'p_threshold_sum')::int, (hcode_parameters->'p_heuristic')::int, $5)
+   SELECT hcode_distribution_reduce_recursive_raw($1, $2, $3, (hcode_parameters->>'p_threshold')::int, (hcode_parameters->>'p_threshold_sum')::int, (hcode_parameters->>'p_heuristic')::int, $5)
 $wrap$ LANGUAGE SQL;
 
 CREATE or replace FUNCTION hcode_distribution_reduce(
@@ -335,7 +335,15 @@ CREATE or replace FUNCTION hcode_distribution_reduce(
   FROM hcode_distribution_reduce_recursive_raw($1,$2,$3,$4,$5,$6)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 
-
+CREATE or replace FUNCTION hcode_distribution_reduce(
+  p_j              jsonB,             -- 1. input pairs {$hcode:$n_items}
+  p_left_erode     int DEFAULT 1,     -- 2. number of charcters to drop from left to right
+  p_size_min       int DEFAULT 1,     -- 3. minimal size of hcode
+  hcode_parameters jsonb DEFAULT NULL -- 4. hcode_distribution_parameters
+)  RETURNS jsonB AS $wrap$
+  SELECT jsonb_object_agg(hcode, n_items)
+  FROM hcode_distribution_reduce_recursive_raw($1,$2,$3,(hcode_parameters->>'p_threshold')::int, (hcode_parameters->>'p_threshold_sum')::int, (hcode_parameters->>'p_heuristic')::int)
+$wrap$ LANGUAGE SQL IMMUTABLE;
 
 -- Função em teste, buscam reduzir em até 10 geohashes
 
@@ -447,4 +455,14 @@ CREATE or replace FUNCTION hcode_signature_reduce(
 ) RETURNS jsonB AS $wrap$
   SELECT jsonb_object_agg(hcode, n_items)
   FROM hcode_signature_reduce_recursive_raw($1,$2,$3,$4,$5)
+$wrap$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION hcode_signature_reduce(
+  p_j             jsonB,              -- 1. input pairs {$hcode:$n_items}
+  p_left_erode    int  DEFAULT 1,     -- 2. number of charcters to drop from left to right
+  p_size_min      int  DEFAULT 1,     -- 3. minimal size of hcode
+  hcode_parameters jsonb DEFAULT NULL -- 4. hcode_signature_parameters
+) RETURNS jsonB AS $wrap$
+  SELECT jsonb_object_agg(hcode, n_items)
+  FROM hcode_signature_reduce_recursive_raw($1,$2,$3,(hcode_parameters->>'p_percentile')::real,(hcode_parameters->>'p_heuristic')::int)
 $wrap$ LANGUAGE SQL IMMUTABLE;
