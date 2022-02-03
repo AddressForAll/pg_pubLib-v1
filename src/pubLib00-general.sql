@@ -19,3 +19,21 @@ $f$  LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION iif
   IS 'Immediate IF. Sintax sugar for the most frequent CASE-WHEN. Avoid with text, need explicit cast.'
 ;
+
+-- -- -- -- -- -- -- -- -- -- --
+-- Complementar CAST functions:
+
+CREATE or replace FUNCTION ROUND(float,int) RETURNS NUMERIC AS $wrap$
+   SELECT ROUND($1::numeric,$2)
+$wrap$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION ROUND(float,int)
+  IS 'Cast for ROUND(float,x). Useful for SUM, AVG, etc. See also https://stackoverflow.com/a/20934099/287948.'
+;
+
+CREATE FUNCTION ROUND(
+  input float,    -- the input number
+  dec_digits int, -- decimal digits to reduce precision
+  accuracy float  -- compatible accuracy, a "counting unit"
+) RETURNS float AS $f$
+   SELECT ROUND($1/accuracy,dec_digits)*accuracy
+$f$ language SQL IMMUTABLE;
