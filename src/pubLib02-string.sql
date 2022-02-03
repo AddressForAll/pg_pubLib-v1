@@ -4,8 +4,9 @@ CREATE EXTENSION IF NOT EXISTS unaccent;
 -- Casts, str_to_something:
 
 CREATE or replace FUNCTION to_bigint(str text) RETURNS bigint as $f$
-  SELECT CASE WHEN s='' THEN NULL::int ELSE s::bigint END
+  SELECT CASE WHEN s='' THEN NULL::int ELSE substr(s,1,18)::bigint END
   FROM (SELECT regexp_replace(str, '[^0-9]', '','g')) t(s)
+  -- pendente avaliar solução que pega só o primero de vários número separados por espaço.
 $f$ LANGUAGE SQL IMMUTABLE;
 
 CREATE or replace FUNCTION to_integer(str text) RETURNS int as $f$
