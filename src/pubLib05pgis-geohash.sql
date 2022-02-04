@@ -75,7 +75,8 @@ COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,geometry)
 -- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":{"x":12,"y":34},"7h2w":200,"7h2wju":{"x":55,"a":null},"6urz":null}'::jsonb);
 
 CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(
-    ghs_set jsonB, opts jsonB,
+    ghs_set jsonB,
+    opts jsonB,
     geom_mask geometry DEFAULT null,
     minimal_area float DEFAULT 1.0 -- precision of point and geohash-cell are not superior than 1 m2.
 )
