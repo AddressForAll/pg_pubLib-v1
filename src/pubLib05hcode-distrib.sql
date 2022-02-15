@@ -83,7 +83,7 @@ BEGIN
   EXECUTE format(
     q,
     p_geocode_size,
-    CASE WHEN p_sum THEN $$SUM((info->'npoints')::bigint) n$$ ELSE 'COUNT(*) n' END,
+    CASE WHEN p_sum THEN $$SUM((info->'bytes')::bigint) n$$ ELSE 'COUNT(*) n' END,
     p_relation
     ) INTO ret;
   RETURN ret;
@@ -121,7 +121,7 @@ BEGIN
   $$;
   EXECUTE format(
     q,
-    CASE WHEN p_sum THEN $$SUM((info->'npoints')::bigint) n$$ ELSE 'COUNT(*) n' END,
+    CASE WHEN p_sum THEN $$SUM((info->'bytes')::bigint) n$$ ELSE 'COUNT(*) n' END,
     p_geocode_function,
     CASE WHEN p_ispoint THEN 'true' ELSE 'false' END,
     p_geom_col, p_geom_col,
