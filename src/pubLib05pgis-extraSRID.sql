@@ -59,5 +59,13 @@ INSERT INTO spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) VALU
     UNIT["metre",1,AUTHORITY["EPSG","9001"]],
     AUTHORITY["EPSG","9377"]
   ]$$
+),
+  -- -- -- --
+( -- rHEALPix:
+  955001, -- arbitrary number, "DGGS projections" counter, from 955001 to 955099.
+  'DGGS:01:rHEALPix',
+  9377,
+  '+proj=rhealpix +ellps=WGS84 +south_square=0 +north_square=2',
+  NULL -- no srtext
 )
 ON CONFLICT DO NOTHING;
