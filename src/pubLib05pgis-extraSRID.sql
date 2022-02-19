@@ -61,11 +61,34 @@ INSERT INTO spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) VALU
   ]$$
 ),
   -- -- -- --
-( -- rHEALPix:
-  955001, -- arbitrary number, "DGGS projections" counter, from 955001 to 955099.
-  'DGGS:01:rHEALPix',
-  9377,
+  --  "DGGS projections" from SRID 955001 to 955099.
+  --
+( -- rHEALPix default, PROJ v4.8+
+  955001,  'DGGS:001:rHEALPix',  1,
+  '+proj=rhealpix',
+  NULL -- no srtext
+),
+( -- rHEALPix variant 2, PROJ v4.8+
+  955002,  'DGGS:002:rHEALPix',  2,
   '+proj=rhealpix +ellps=WGS84 +south_square=0 +north_square=2',
   NULL -- no srtext
+),
+
+( -- QSC default, PROJ v?+
+  955010,  'DGGS:010:QSC',  10,
+  '+proj=qsc',
+  NULL -- no srtext
+),
+--( -- S2 default, PROJ v8.2+
+--  955020,  'DGGS:020:S2',  20,
+--  '+proj=s2',
+--  NULL -- no srtext
+--),
+
+( -- ISEA default, PROJ v?+ (without inverse!)
+  955030,  'DGGS:030:ISEA',  30,
+  '+proj=isea',
+  NULL -- no srtext
 )
+
 ON CONFLICT DO NOTHING;
