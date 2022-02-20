@@ -167,17 +167,18 @@ COMMENT ON FUNCTION show_UDF
 -- SELECT name, return_type, arguments FROM show_udf('public','%geohas%','st_%');
 -- SELECT name, return_type, comment FROM show_udf('public','show_UDF');
 
-
 CREATE or replace FUNCTION show_UDF_simplified_signature(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
   p_name_notlike text DEFAULT ''
 ) RETURNS TABLE (
+  oid text,
   schema_name information_schema.sql_identifier,
   name information_schema.sql_identifier,
-  simplified_signature information_schema.character_data[]
+  arguments_simplified information_schema.character_data[]
 ) AS $f$
-  SELECT routines.specific_schema, routines.routine_name,
+  SELECT substring(routines.specific_name::text from '[^_]+$'),
+         routines.specific_schema, routines.routine_name,
          array_agg(parameters.data_type ORDER BY parameters.ordinal_position) as simplified_signature
   FROM information_schema.routines
     LEFT JOIN information_schema.parameters ON routines.specific_name=parameters.specific_name
@@ -185,10 +186,34 @@ CREATE or replace FUNCTION show_UDF_simplified_signature(
         CASE WHEN COALESCE(p_schema_name,'') >''   THEN p_schema_name=routines.specific_schema  ELSE true END
         AND CASE WHEN COALESCE(p_name_like,'') >'' THEN routines.routine_name iLIKE p_name_like ELSE true END
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(routines.routine_name iLIKE p_name_notlike) ELSE true END
-  GROUP BY 1, 2, routines.specific_name
+  GROUP BY routines.specific_name, 2, 3
   ORDER BY routines.routine_name, routines.specific_name 
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION show_UDF_simplified_signature
   IS 'Show name and simplified argument list about an User Defined Function (UDF), by its name or listing all functions by LIKE filter. Useful for namespace analyses'
 ;
 -- SELECT * FROM show_UDF_simplified_signature('','%geohash%','st_%');
+
+CREATE or replace FUNCTION show_UDF_simple(
+  p_schema_name text DEFAULT NULL,
+  p_name_like text DEFAULT '',
+  p_name_notlike text DEFAULT '',
+  p_oid oid DEFAULT NULL
+) RETURNS TABLE (
+  oid oid,
+  schema_name text,
+  name text,
+  arguments_simplified text[],  
+  arguments text,
+  return_type text,
+  prokind text,
+  comment text
+) AS $f$
+  SELECT u.oid, u.schema_name, u.name::text,
+         s.arguments_simplified::text[] as arguments_simplified, 
+         u.arguments::text AS arguments,
+         u.return_type, u.prokind, u.comment
+  FROM show_UDF_simplified_signature($1,$2,$3) s
+      INNER JOIN show_udf($1,$2,$3,$4) u ON s.oid=u.oid::text
+$f$ LANGUAGE SQL IMMUTABLE;
+-- SELECT * FROM show_UDF_simple('','%geohash%','st_%');
