@@ -156,8 +156,10 @@ CREATE or replace FUNCTION show_UDF(
     LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
     LEFT JOIN pg_type on pg_type.oid = pg_proc.prorettype
   WHERE pg_namespace.nspname not in ('pg_catalog', 'information_schema')
-        AND CASE WHEN p_schema_name IS NOT NULL    THEN p_schema_name=pg_namespace.nspname::text ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN pg_proc.proname::text iLIKE p_name_like ELSE true END
+        AND CASE WHEN COALESCE(p_schema_name,'') >'' THEN p_schema_name=pg_namespace.nspname::text ELSE true END
+        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN 
+              CASE WHEN position('%' in p_name_like)>0 THEN pg_proc.proname::text iLIKE p_name_like ELSE pg_proc.proname::text ~ p_name_like END 
+            ELSE true END
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(pg_proc.proname::text iLIKE p_name_notlike) ELSE true END
         AND CASE WHEN p_oid IS NOT NULL THEN pg_proc.oid=p_oid ELSE true END
 $f$ LANGUAGE SQL IMMUTABLE;
@@ -184,7 +186,9 @@ CREATE or replace FUNCTION show_UDF_simplified_signature(
     LEFT JOIN information_schema.parameters ON routines.specific_name=parameters.specific_name
   WHERE 
         CASE WHEN COALESCE(p_schema_name,'') >''   THEN p_schema_name=routines.specific_schema  ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN routines.routine_name iLIKE p_name_like ELSE true END
+        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN 
+              CASE WHEN position('%' in p_name_like)>0 THEN routines.routine_name::text iLIKE p_name_like ELSE routines.routine_name::text ~ p_name_like END 
+            ELSE true END
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(routines.routine_name iLIKE p_name_notlike) ELSE true END
   GROUP BY routines.specific_name, 2, 3
   ORDER BY routines.routine_name, routines.specific_name 
