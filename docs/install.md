@@ -4,6 +4,14 @@ RECOMMENDATION: to install (in a database) only the used modules.
 
 RATIONALE: each database in each project can use a different set of pubLib functions. It is good practice to avoid "namespace pollution" with unused functions, so, the pubLib modularization makes a reasonable partition over this "pollution risk".
 
+## Dependencies
+The SQL source code, at [/src](http://git.AddressForAll.org/pg_pubLib-v1/tree/main/src), files in the form `pubLib*.sql` have its `*` part as labels in the folowing dependency diagram:  
+```mermaid
+graph LR
+    00-general --> 01-array & 01py-string --> 02-string --> 03-admin.sql & 03-json --> 04-aggregate
+    04-aggregate --> 05hcode-distrib & 05pgis-extraSRID.sql & 05pgis-geohash.sql --> 06pgis-geoJSON 
+```
+
 ## Installing all library
 
 Use `make instAll` to install all scripts, or install at database *db* a specific one like *array*,
