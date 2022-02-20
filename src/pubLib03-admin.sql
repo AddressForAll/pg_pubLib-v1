@@ -116,8 +116,10 @@ CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] A
    ) t2
 $f$ LANGUAGE SQL;
 
+-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- Documentation helper functions (doc_ prefix)
 
-CREATE or replace FUNCTION show_UDF(
+CREATE or replace FUNCTION doc_UDF_show(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
   p_name_notlike text DEFAULT '',
@@ -163,13 +165,13 @@ CREATE or replace FUNCTION show_UDF(
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(pg_proc.proname::text iLIKE p_name_notlike) ELSE true END
         AND CASE WHEN p_oid IS NOT NULL THEN pg_proc.oid=p_oid ELSE true END
 $f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION show_UDF
+COMMENT ON FUNCTION doc_UDF_show
   IS 'Show all information about an User Defined Function (UDF), by its OID, or listing all functions by LIKE filter.'
 ;
--- SELECT name, return_type, arguments FROM show_udf('public','%geohas%','st_%');
--- SELECT name, return_type, comment FROM show_udf('public','show_UDF');
+-- SELECT name, return_type, arguments FROM doc_UDF_show('public','%geohas%','st_%');
+-- SELECT name, return_type, comment FROM doc_UDF_show('public','show_UDF');
 
-CREATE or replace FUNCTION show_UDF_simplified_signature(
+CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
   p_name_notlike text DEFAULT ''
@@ -193,17 +195,55 @@ CREATE or replace FUNCTION show_UDF_simplified_signature(
   GROUP BY routines.specific_name, 2, 3
   ORDER BY routines.routine_name, routines.specific_name 
 $f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION show_UDF_simplified_signature
+COMMENT ON FUNCTION doc_UDF_show_simplified_signature
   IS 'Show name and simplified argument list about an User Defined Function (UDF), by its name or listing all functions by LIKE filter. Useful for namespace analyses'
 ;
--- SELECT * FROM show_UDF_simplified_signature('','%geohash%','st_%');
+-- SELECT * FROM doc_UDF_show_simplified_signature('','%geohash%','st_%');
 
-CREATE or replace FUNCTION show_UDF_simple(
+
+CREATE or replace FUNCTION doc_UDF_transparent_id(
+  name_expression text,
+  md5_digits int DEFAULT 6   -- good for ~5000 items or less. Not need more items in a limited-scope documentation.
+) RETURNS text AS $f$
+  SELECT substr( md5(lower(name_expression)), 1, md5_digits)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION doc_UDF_transparent_id(text,int)
+  IS 'Offers a public eternal identifier for a function, important to JOINS in the documentation schema.'
+;
+-- SELECT doc_UDF_transparent_id( 'public.doc_UDF_show(text,text,text,OID)' ); -- eternally '875377'
+
+CREATE or replace FUNCTION doc_UDF_transparent_id(
+  schema_name text,
+  name text,
+  arguments_simplified text[],
+  md5_digits int DEFAULT 6   -- good for ~5000 items or less. Not need more items in a limited-scope documentation.
+) RETURNS text AS $f$
+  SELECT doc_UDF_transparent_id( schema_name||'.'||name||'('||array_to_string(arguments_simplified,',')||')', md5_digits)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION doc_UDF_transparent_id(text,text,text[],int)
+  IS 'Prepare the standard parameters for doc_UDF_transparent_id().'
+;
+-- SELECT doc_UDF_transparent_id('public','doc_UDF_show','{text,text,text,oid}');
+
+CREATE or replace FUNCTION doc_UDF_transparent_id(
+  name text,
+  arguments_simplified text[],
+  md5_digits int DEFAULT 6
+) RETURNS text AS $wrap$
+  SELECT doc_UDF_transparent_id('public',$1,$2,$3);
+$wrap$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION doc_UDF_transparent_id(text,text[],int)
+  IS 'Prepare parameters for doc_UDF_transparent_id().'
+;
+-- SELECT doc_UDF_transparent_id('doc_UDF_show','{text,text,text,oid}');
+
+CREATE or replace FUNCTION doc_UDF_show_simple(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
   p_name_notlike text DEFAULT '',
   p_oid oid DEFAULT NULL
 ) RETURNS TABLE (
+  id text,
   oid oid,
   schema_name text,
   name text,
@@ -213,11 +253,12 @@ CREATE or replace FUNCTION show_UDF_simple(
   prokind text,
   comment text
 ) AS $f$
-  SELECT u.oid, u.schema_name, u.name::text,
+  SELECT doc_UDF_transparent_id(u.schema_name, u.name::text, s.arguments_simplified::text[]) AS id,
+         u.oid, u.schema_name, u.name::text,
          s.arguments_simplified::text[] as arguments_simplified, 
          u.arguments::text AS arguments,
          u.return_type, u.prokind, u.comment
-  FROM show_UDF_simplified_signature($1,$2,$3) s
-      INNER JOIN show_udf($1,$2,$3,$4) u ON s.oid=u.oid::text
+  FROM doc_UDF_show_simplified_signature($1,$2,$3) s
+      INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid=u.oid::text
 $f$ LANGUAGE SQL IMMUTABLE;
--- SELECT * FROM show_UDF_simple('','%geohash%','st_%');
+-- SELECT * FROM doc_UDF_show_simple('','%geohash%','st_%');
