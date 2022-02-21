@@ -24,5 +24,6 @@ all:
 	psql $(pg_uri) < pubLib05hcode-distrib.sql
 	psql $(pg_uri) < pubLib05pgis-extraSRID.sql
 	psql $(pg_uri) < pubLib05pgis-geohash.sql
+	psql $(pg_uri) < pubLib05xml-general.sql
 	@echo "... Installing functions level 06:"
 	psql $(pg_uri) < pubLib06pgis-geoJSON.sql

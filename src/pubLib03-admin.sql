@@ -159,8 +159,8 @@ CREATE or replace FUNCTION doc_UDF_show(
     LEFT JOIN pg_type on pg_type.oid = pg_proc.prorettype
   WHERE pg_namespace.nspname not in ('pg_catalog', 'information_schema')
         AND CASE WHEN COALESCE(p_schema_name,'') >'' THEN p_schema_name=pg_namespace.nspname::text ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN 
-              CASE WHEN position('%' in p_name_like)>0 THEN pg_proc.proname::text iLIKE p_name_like ELSE pg_proc.proname::text ~ p_name_like END 
+        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN
+              CASE WHEN position('%' in p_name_like)>0 THEN pg_proc.proname::text iLIKE p_name_like ELSE pg_proc.proname::text ~ p_name_like END
             ELSE true END
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(pg_proc.proname::text iLIKE p_name_notlike) ELSE true END
         AND CASE WHEN p_oid IS NOT NULL THEN pg_proc.oid=p_oid ELSE true END
@@ -186,14 +186,14 @@ CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
          array_agg(parameters.data_type ORDER BY parameters.ordinal_position) as simplified_signature
   FROM information_schema.routines
     LEFT JOIN information_schema.parameters ON routines.specific_name=parameters.specific_name
-  WHERE 
+  WHERE
         CASE WHEN COALESCE(p_schema_name,'') >''   THEN p_schema_name=routines.specific_schema  ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN 
-              CASE WHEN position('%' in p_name_like)>0 THEN routines.routine_name::text iLIKE p_name_like ELSE routines.routine_name::text ~ p_name_like END 
+        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN
+              CASE WHEN position('%' in p_name_like)>0 THEN routines.routine_name::text iLIKE p_name_like ELSE routines.routine_name::text ~ p_name_like END
             ELSE true END
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN NOT(routines.routine_name iLIKE p_name_notlike) ELSE true END
   GROUP BY routines.specific_name, 2, 3
-  ORDER BY routines.routine_name, routines.specific_name 
+  ORDER BY routines.routine_name, routines.specific_name
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION doc_UDF_show_simplified_signature
   IS 'Show name and simplified argument list about an User Defined Function (UDF), by its name or listing all functions by LIKE filter. Useful for namespace analyses'
@@ -247,7 +247,7 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
   oid oid,
   schema_name text,
   name text,
-  arguments_simplified text[],  
+  arguments_simplified text[],
   arguments text,
   return_type text,
   prokind text,
@@ -255,7 +255,7 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
 ) AS $f$
   SELECT doc_UDF_transparent_id(u.schema_name, u.name::text, s.arguments_simplified::text[]) AS id,
          u.oid, u.schema_name, u.name::text,
-         s.arguments_simplified::text[] as arguments_simplified, 
+         s.arguments_simplified::text[] as arguments_simplified,
          u.arguments::text AS arguments,
          u.return_type, u.prokind, u.comment
   FROM doc_UDF_show_simplified_signature($1,$2,$3) s
