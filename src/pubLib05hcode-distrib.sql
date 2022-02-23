@@ -236,7 +236,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw(
     lst_pre       text;
   BEGIN
 
-   IF  COALESCE(p_heuristic,0)=0 OR ctrl_recursions>5 THEN --  OR p_heuristic>3
+   IF  COALESCE(p_heuristic,0)=0 OR ctrl_recursions>50 THEN --  OR p_heuristic>3
       RETURN QUERY
         SELECT * FROM
         hcode_distribution_reduce_pre_raw( p_j, p_left_erode, p_size_min, p_threshold, p_threshold_sum );
