@@ -6,9 +6,9 @@
  * HCode is a left-to-right hierarchical code. See http://addressforall.org/_foundations/art1.pdf
  * A typical class of HCodes are the Geocode systems of regular hierarchical grids, as defined in
  *   https://en.wikipedia.org/w/index.php?title=Geocode&oldid=1052536888#Hierarchical_grids
- * Geohash is a typical example of valid HCode for this library.
+ * Generalized Geohash is a typical example of valid HCode for this library.
  *
- * Module: HCode/EncodeDecode0000000.
+ * Module: HCode/EncodeDecode.
  * DependsOn: pubLib03-json
  * Prefix: hcode
  * license: CC0
@@ -35,7 +35,7 @@ DECLARE
  bitsTotal int := 0;
  hash_value int := 0;
  mid float;
- code char;
+ digit char;
  safe_loop int := 0;
 BEGIN
  IF numberOfChars IS NULL OR numberOfChars=0 THEN
@@ -65,18 +65,68 @@ BEGIN
    bits := bits + 1;
    bitsTotal := bitsTotal +1;
    IF bits = baseBits THEN
-     code := substr(BASE32_CODES, hash_value+1, 1);
-     chars := array_append(chars, code);
+     digit := substr(BASE32_CODES, hash_value+1, 1);
+     chars := array_append(chars, digit);
      bits := 0;
      hash_value := 0;
    END IF;
  END LOOP; -- \chars
- RETURN  array_to_string(chars,'');
+ RETURN  array_to_string(chars,''); -- code
 END
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_encode
   IS 'Encondes LatLon as Generalized Geohash. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
 ;
+
+CREATE or replace FUNCTION str_ggeohash_decode_box(
+   code text,
+   baseBits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
+   BASE32_CODES_DICT jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "e":13, "f":14, "g":15, "h":16, "j":17, "k":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb,
+   max_x float default 90.,
+   min_x float default -90.,
+   max_y float default 180.,
+   min_y float default-180.
+) RETURNS float[] as $f$
+DECLARE
+  isX  boolean := true;
+  hashValue int := 0;
+  mid    float;
+  bits   int;
+  bit    int;
+  i int;
+  digit text;
+BEGIN
+   code = lower(code);
+   FOR i IN 1..length(code) LOOP
+      digit = substr(code,i,1);
+      hashValue := (BASE32_CODES_DICT->digit)::int;
+      FOR bits IN REVERSE (baseBits-1)..0 LOOP
+	      bit = (hashValue >> bits) & 1; -- can be boolean
+	      IF isX THEN
+          mid = (max_y + min_y) / 2;
+          IF bit = 1 THEN
+            min_y := mid;
+          ELSE
+            max_y := mid;
+          END IF; -- \bit
+        ELSE
+          mid = (max_x + min_x) / 2;
+          IF bit =1 THEN
+            min_x = mid;
+          ELSE
+            max_x = mid;
+          END IF; --\bit
+        END IF; -- \isX
+        isX := NOT(isX);
+      END LOOP; -- \bits
+   END LOOP; -- \i
+   RETURN array[min_x, min_y, max_x, max_y];
+END
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_decode_box
+  IS 'Decodes string of a Generalized Geohash into a bounding Box that matches it. Returns a four-element array: [minlat, minlon, maxlat, maxlon]. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
+;
+
 
 -- -- -- -- -- -- -- -- -- --
 -- Wrap and helper functions:
@@ -97,6 +147,20 @@ CREATE or replace FUNCTION str_geohash_encode(
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geohash_encode(float,float,int)
   IS 'Encondes LatLon as classic Geohash of Niemeyer 2008.'
+;
+
+CREATE or replace FUNCTION str_geohash_decode(
+   code text,
+   witherror boolean default false
+) RETURNS float[] as $f$
+  SELECT CASE WHEN witherror THEN latlon || array[bbox[3] - latlon[1], bbox[4] - latlon[2]] ELSE latlon END
+  FROM (
+    SELECT array[(bbox[1] + bbox[3]) / 2, (bbox[2] + bbox[4]) / 2] as latlon, bbox
+    FROM (SELECT str_ggeohash_decode_box(code)) t1(bbox)
+  ) t2
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION str_geohash_encode(float,float,int)
+  IS 'Decodes classic Geohash (of Niemeyer 2008) to latitude and longitude, optionally adding error to the array.'
 ;
 
 ----
