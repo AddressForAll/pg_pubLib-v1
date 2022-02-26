@@ -257,3 +257,14 @@ CREATE or replace FUNCTION array_distinct_sort (
    )
  ) t(x)
 $f$ language SQL strict IMMUTABLE;
+
+
+CREATE or replace FUNCTION array_ROUND(
+  input    float[],    -- the input numbers
+  accuracy float       -- uniform accuracy
+) RETURNS float[] AS $f$
+  SELECT array_agg(round(x,accuracy)) FROM unnest(input) t(x)
+$f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION array_ROUND(float[],float)
+  IS 'ROUND array of floats by accuracy. A wrap for ROUND(float,float).'
+;
