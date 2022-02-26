@@ -24,15 +24,15 @@ ASSERT str_geohash_encode('geo:-29.78333,-57.03694') = '6dxqw44g',   'fail in 6d
 ASSERT str_geohash_encode('geo:-23.550385,-46.633956') = '6gyf4bf1', 'fail in 6gyf4bf1';
 
 RAISE NOTICE '--- Function str_geohash_decode: ---';
-ASSERT array_round(str_geohash_decode('6qpz22nb'),0.001) = '{-9.976,-67.831}'::float[],   'fail in 6qpz22nb';
-ASSERT array_round(str_geohash_decode('6xmq4nhk'),0.001) = '{-3.13,-60.023}'::float[],    'fail in 6xmq4nhk';
-ASSERT array_round(str_geohash_decode('dbejvqgn'),0.001) = '{3.861,-51.796}'::float[],    'fail in dbejvqgn';
-ASSERT array_round(str_geohash_decode('dbejuwjs'),0.001) = '{3.857,-51.826}'::float[],    'fail in dbejuwjs';
+ASSERT round(str_geohash_decode('6qpz22nb'),0.001) = '{-9.976,-67.831}'::float[],   'fail in 6qpz22nb';
+ASSERT round(str_geohash_decode('6xmq4nhk'),0.001) = '{-3.13,-60.023}'::float[],    'fail in 6xmq4nhk';
+ASSERT round(str_geohash_decode('dbejvqgn'),0.001) = '{3.861,-51.796}'::float[],    'fail in dbejvqgn';
+ASSERT round(str_geohash_decode('dbejuwjs'),0.001) = '{3.857,-51.826}'::float[],    'fail in dbejuwjs';
 -- ...
-ASSERT array_round(str_geohash_decode('d8uv9fux'),0.001) = '{5.202,-60.737}'::float[],   'fail in d8uv9fux';
-ASSERT array_round(str_geohash_decode('6f4013w8'),0.001) = '{-33.742,-53.373}'::float[], 'fail in 6f4013w8';
-ASSERT array_round(str_geohash_decode('6dxqw44g'),0.001) = '{-29.783,-57.037}'::float[], 'fail in 6dxqw44g';
-ASSERT array_round(str_geohash_decode('6gyf4bf1'),0.001) = '{-23.55,-46.634}'::float[],  'fail in 6gyf4bf1';
+ASSERT round(str_geohash_decode('d8uv9fux'),0.001) = '{5.202,-60.737}'::float[],   'fail in d8uv9fux';
+ASSERT round(str_geohash_decode('6f4013w8'),0.001) = '{-33.742,-53.373}'::float[], 'fail in 6f4013w8';
+ASSERT round(str_geohash_decode('6dxqw44g'),0.001) = '{-29.783,-57.037}'::float[], 'fail in 6dxqw44g';
+ASSERT round(str_geohash_decode('6gyf4bf1'),0.001) = '{-23.55,-46.634}'::float[],  'fail in 6gyf4bf1';
 END;$a$;
 
 /*  -- generators --
