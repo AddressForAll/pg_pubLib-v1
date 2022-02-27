@@ -20,9 +20,9 @@
 CREATE or replace FUNCTION str_ggeohash_encode(
    x float,
    y float,
-   numberOfChars int default NULL, -- default 9 for base32 and 23 for base4
-   baseBits int default 5,   -- 5 for base32, 4 for base16 or 2 for base4
-   BASE32_CODES text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ',
+   code_size int default NULL, -- default 9 for base32 and 23 for base4
+   code_digit_bits int default 5,   -- 5 for base32, 4 for base16 or 2 for base4
+   code_digits_alphabet text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ',
    -- see base32nvU at http://addressforall.org/_foundations/art1.pdf
    min_x float default -90.,
    min_y float default -180.,
@@ -38,10 +38,10 @@ DECLARE
  digit char;
  safe_loop int := 0;
 BEGIN
- IF numberOfChars IS NULL OR numberOfChars=0 THEN
-    numberOfChars := (array[38,23,18,12,9])[baseBits];
+ IF code_size IS NULL OR code_size=0 THEN
+    code_size := (array[38,23,18,12,9])[code_digit_bits];
  END IF;
- WHILE safe_loop<200 AND cardinality(chars) < numberOfChars LOOP
+ WHILE safe_loop<200 AND cardinality(chars) < code_size LOOP
    IF bitsTotal % 2 = 0 THEN
      mid := (max_y + min_y) / 2.0;
      IF y > mid THEN
@@ -64,8 +64,8 @@ BEGIN
    safe_loop := safe_loop + 1; -- new
    bits := bits + 1;
    bitsTotal := bitsTotal +1;
-   IF bits = baseBits THEN
-     digit := substr(BASE32_CODES, hash_value+1, 1);
+   IF bits = code_digit_bits THEN
+     digit := substr(code_digits_alphabet, hash_value+1, 1);
      chars := array_append(chars, digit);
      bits := 0;
      hash_value := 0;
@@ -81,19 +81,19 @@ COMMENT ON FUNCTION str_ggeohash_encode
 CREATE or replace FUNCTION str_ggeohash_encode(
    x float,
    y float,
-   numberOfChars int,
-   baseBits int,
-   BASE32_CODES text,
+   code_size int,
+   code_digit_bits int,
+   code_digits_alphabet text,
    bbox float[]
 ) RETURNS text as $f$
-   SELECT str_ggeohash_encode(x,y,numberOfChars,baseBits,BASE32_CODES,bbox[1],bbox[2],bbox[3],bbox[4])
+   SELECT str_ggeohash_encode(x,y,code_size,code_digit_bits,code_digits_alphabet,bbox[1],bbox[2],bbox[3],bbox[4])
 $f$ LANGUAGE SQL IMMUTABLE;
 
 CREATE or replace FUNCTION str_ggeohash_decode_box(
    code text,
-   baseBits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
-   -- SELECT jsonb_object_agg(x,i-1) from regexp_split_to_table(BASE32_CODES,'') WITH ORDINALITY AS t(x,i);
-   BASE32_CODES_DICT jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "e":13, "f":14, "g":15, "h":16, "j":17, "k":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb,
+   code_digit_bits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
+   -- SELECT jsonb_object_agg(x,i-1) from regexp_split_to_table(code_digits_alphabet,'') WITH ORDINALITY AS t(x,i);
+   code_digits_lookup jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "e":13, "f":14, "g":15, "h":16, "j":17, "k":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb,
    min_x float default -90.,
    min_y float default -180.,
    max_x float default 90.,
@@ -111,8 +111,8 @@ BEGIN
    code = lower(code);
    FOR i IN 1..length(code) LOOP
       digit = substr(code,i,1);
-      hashValue := (BASE32_CODES_DICT->digit)::int;
-      FOR bits IN REVERSE (baseBits-1)..0 LOOP
+      hashValue := (code_digits_lookup->digit)::int;
+      FOR bits IN REVERSE (code_digit_bits-1)..0 LOOP
 	      bit = (hashValue >> bits) & 1; -- can be boolean
 	      IF isX THEN
           mid = (max_y + min_y) / 2;
@@ -153,9 +153,9 @@ COMMENT ON FUNCTION str_geouri_decode(text)
 CREATE or replace FUNCTION str_geohash_encode(
  latitude float,
  longitude float,
- numberOfChars int default NULL
+ code_size int default NULL
 ) RETURNS text as $f$
- SELECT str_ggeohash_encode(latitude,longitude,numberOfChars,5,'0123456789bcdefghjkmnpqrstuvwxyz')
+ SELECT str_ggeohash_encode(latitude,longitude,code_size,5,'0123456789bcdefghjkmnpqrstuvwxyz')
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geohash_encode(float,float,int)
   IS 'Encondes LatLon as classic Geohash of Niemeyer 2008.'
@@ -179,9 +179,9 @@ COMMENT ON FUNCTION str_geohash_encode(float,float,int)
 
 CREATE or replace FUNCTION str_geohash_encode(
   latLon float[],
-  numberOfChars int default NULL
+  code_size int default NULL
 ) RETURNS text as $wrap$
-  SELECT str_geohash_encode(latLon[1],latLon[2],numberOfChars)
+  SELECT str_geohash_encode(latLon[1],latLon[2],code_size)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geohash_encode(float[],int)
   IS 'Wrap for str_geohash_encode() with array input.'
@@ -199,16 +199,16 @@ COMMENT ON FUNCTION str_geohash_encode(text)
 
 -------------------------------------
 ----- using UV normalized coordinates
-   
+
 CREATE or replace FUNCTION str_ggeohash_uv_encode(
    u float,  -- 0.0 to 1.0, normalized X.
    v float,  -- 0.0 to 1.0, normalized Y.
-   numberOfChars int default NULL,
-   baseBits int default 5,   -- 5 for base32, 4 for base16 or 2 for base4
-   BASE32_CODES text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ'
+   code_size int default NULL,
+   code_digit_bits int default 5,   -- 5 for base32, 4 for base16 or 2 for base4
+   code_digits_alphabet text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ'
 	-- see base32nvU at http://addressforall.org/_foundations/art1.pdf
 ) RETURNS text as $wrap$
-   SELECT str_ggeohash_encode(u, v, numberOfChars, baseBits, BASE32_CODES, 0.0, 0.0, 1.0, 1.0)
+   SELECT str_ggeohash_encode(u, v, code_size, code_digit_bits, code_digits_alphabet, 0.0, 0.0, 1.0, 1.0)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_uv_encode
   IS 'Wrap for str_ggeohash_encode() with normalized UV coordinates.'
@@ -216,10 +216,10 @@ COMMENT ON FUNCTION str_ggeohash_uv_encode
 
 CREATE or replace FUNCTION str_ggeohash_uv_decode_box(
    code text,
-   baseBits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
-   BASE32_CODES_DICT jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "f":13, "g":14, "h":15, "j":16, "k":17, "l":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb
+   code_digit_bits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
+   code_digits_lookup jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "f":13, "g":14, "h":15, "j":16, "k":17, "l":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb
 ) RETURNS float[] as $wrap$
-   SELECT str_ggeohash_decode_box(code, baseBits, BASE32_CODES_DICT, 0.0, 0.0, 1.0, 1.0)
+   SELECT str_ggeohash_decode_box(code, code_digit_bits, code_digits_lookup, 0.0, 0.0, 1.0, 1.0)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_uv_decode_box
   IS 'Wrap for str_ggeohash_decode_box(), returning normalized UV coordinates.'
