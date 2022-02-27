@@ -24,10 +24,10 @@ CREATE or replace FUNCTION str_ggeohash_encode(
    baseBits int default 5,   -- 5 for base32, 4 for base16 or 2 for base4
    BASE32_CODES text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ',
    -- see base32nvU at http://addressforall.org/_foundations/art1.pdf
-   max_x float default 90.,
    min_x float default -90.,
-   max_y float default 180.,
-   min_y float default-180.
+   min_y float default -180.,
+   max_x float default 90.,
+   max_y float default 180.
 ) RETURNS text as $f$
 DECLARE
  chars text[]  := array[]::text[];
@@ -78,14 +78,26 @@ COMMENT ON FUNCTION str_ggeohash_encode
   IS 'Encondes LatLon as Generalized Geohash. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
 ;
 
+CREATE or replace FUNCTION str_ggeohash_encode(
+   x float,
+   y float,
+   numberOfChars int,
+   baseBits int,
+   BASE32_CODES text,
+   bbox float[]
+) RETURNS text as $f$
+   SELECT str_ggeohash_encode(x,y,numberOfChars,baseBits,BASE32_CODES,bbox[1],bbox[2],bbox[3],bbox[4])
+$f$ LANGUAGE SQL IMMUTABLE;
+
 CREATE or replace FUNCTION str_ggeohash_decode_box(
    code text,
    baseBits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
+   -- SELECT jsonb_object_agg(x,i-1) from regexp_split_to_table(BASE32_CODES,'') WITH ORDINALITY AS t(x,i);
    BASE32_CODES_DICT jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "e":13, "f":14, "g":15, "h":16, "j":17, "k":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb,
-   max_x float default 90.,
    min_x float default -90.,
-   max_y float default 180.,
-   min_y float default-180.
+   min_y float default -180.,
+   max_x float default 90.,
+   max_y float default 180.
 ) RETURNS float[] as $f$
 DECLARE
   isX  boolean := true;
@@ -184,3 +196,22 @@ $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geohash_encode(text)
   IS 'Wrap for str_geohash_encode() with text GeoURI input.'
 ;
+
+----- using UV normalized coordinates
+
+CREATE or replace FUNCTION str_ggeohash_uv_encode(
+   u float,  -- 0.0 to 1.0, normalized X.
+   v float,  -- 0.0 to 1.0, normalized Y.
+   numberOfChars int,
+   baseBits int,
+   BASE32_CODES text,
+   bbox float[]
+) RETURNS text as $f$
+   SELECT str_ggeohash_encode(u, v, numberOfChars, baseBits, BASE32_CODES, 0.0, 0.0, 1.0, 1.0)
+$f$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION str_ggeohash_uv_decode_box(
+   code text,
+   baseBits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
+   BASE32_CODES_DICT jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "e":13, "f":14, "g":15, "h":16, "j":17, "k":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb
+) RETURNS float[] as $f$
