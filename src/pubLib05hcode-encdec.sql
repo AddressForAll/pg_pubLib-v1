@@ -197,6 +197,7 @@ COMMENT ON FUNCTION str_geohash_encode(text)
   IS 'Wrap for str_geohash_encode() with text GeoURI input.'
 ;
 
+-------------------------------------
 ----- using UV normalized coordinates
 
 CREATE or replace FUNCTION str_ggeohash_uv_encode(
@@ -206,12 +207,14 @@ CREATE or replace FUNCTION str_ggeohash_uv_encode(
    baseBits int,
    BASE32_CODES text,
    bbox float[]
-) RETURNS text as $f$
+) RETURNS text as $wrap$
    SELECT str_ggeohash_encode(u, v, numberOfChars, baseBits, BASE32_CODES, 0.0, 0.0, 1.0, 1.0)
-$f$ LANGUAGE SQL IMMUTABLE;
+$wrap$ LANGUAGE SQL IMMUTABLE;
 
 CREATE or replace FUNCTION str_ggeohash_uv_decode_box(
    code text,
    baseBits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
    BASE32_CODES_DICT jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "e":13, "f":14, "g":15, "h":16, "j":17, "k":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb
-) RETURNS float[] as $f$
+) RETURNS float[] as $wrap$
+   SELECT str_ggeohash_decode_box(code, baseBits, BASE32_CODES_DICT, 0.0, 0.0, 1.0, 1.0)
+$wrap$ LANGUAGE SQL IMMUTABLE;
