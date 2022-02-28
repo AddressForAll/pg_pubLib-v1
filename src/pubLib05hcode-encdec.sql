@@ -79,8 +79,6 @@ COMMENT ON FUNCTION str_ggeohash_encode(float, float, integer, integer, text, fl
   IS 'Encondes LatLon WGS84 as Generalized Geohash. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
 ;
 
-
-
 CREATE or replace FUNCTION str_ggeohash_encode2(
    x float,
    y float,
@@ -141,6 +139,18 @@ END
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
 
 
+CREATE or replace FUNCTION str_ggeohash_encode2(
+   x float,
+   y float,
+   code_size int,
+   code_digit_bits int,
+   code_digits_alphabet text,
+   bbox float[]
+) RETURNS jsonb as $f$
+   SELECT str_ggeohash_encode2($1, $2, $3, $4, $5, bbox[1], bbox[2], bbox[3], bbox[4])
+$f$ LANGUAGE SQL IMMUTABLE;
+
+----
 
 CREATE or replace FUNCTION str_ggeohash_encode(
    x float,
@@ -308,12 +318,14 @@ COMMENT ON FUNCTION str_ggeohash_uv_decode_box
   IS 'Wrap for str_ggeohash_decode_box(), returning normalized UV coordinates.'
 ;
 
+-----
+
 CREATE or replace FUNCTION str_ggeohash_draw_cell_bycenter(
   cx int,  -- Center X
   cy int,  -- Center Y
   r int,   -- halfside ou raio do circulo inscrito
   p_translate boolean DEFAULT false, -- true para converter em LatLong (WGS84 sem projeção)
-  p_srid int DEFAULT 952019          -- SRID da grade (default IBGE)
+  p_srid int DEFAULT 4326          -- WGS84
 ) RETURNS geometry AS $f$
 SELECT CASE WHEN p_translate THEN ST_Transform(geom,4326) ELSE geom END
 FROM (
@@ -330,7 +342,7 @@ COMMENT ON FUNCTION str_ggeohash_draw_cell_bycenter(int,int,int,boolean,int)
 CREATE or replace FUNCTION str_ggeohash_draw_cell_bybox(
   b float[],  -- bbox [min_x, min_y, max_x, max_y]
   p_translate boolean DEFAULT false, -- true para converter em LatLong (WGS84 sem projeção)
-  p_srid int DEFAULT 952019          -- SRID da grade (default IBGE)
+  p_srid int DEFAULT 4326            -- WGS84
 ) RETURNS geometry AS $f$
 SELECT CASE WHEN p_translate THEN ST_Transform(geom,4326) ELSE geom END
 FROM (
