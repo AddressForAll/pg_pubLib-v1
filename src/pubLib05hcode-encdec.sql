@@ -79,6 +79,69 @@ COMMENT ON FUNCTION str_ggeohash_encode(float, float, integer, integer, text, fl
   IS 'Encondes LatLon WGS84 as Generalized Geohash. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
 ;
 
+
+
+CREATE or replace FUNCTION str_ggeohash_encode2(
+   x float,
+   y float,
+   code_size int default NULL, -- default 9 for base32 and 23 for base4
+   code_digit_bits int default 5,   -- 5 for base32, 4 for base16 or 2 for base4
+   code_digits_alphabet text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ',
+   -- see base32nvU at http://addressforall.org/_foundations/art1.pdf
+   min_x float default -90.,
+   min_y float default -180.,
+   max_x float default 90.,
+   max_y float default 180.
+) RETURNS jsonb as $f$
+DECLARE
+ chars      text[]  := array[]::text[];
+ bits       int     := 0;
+ bitsTotal  int     := 0;
+ hash_value int     := 0;
+ safe_loop  int     := 0;
+ mid        float;
+ digit      char;
+BEGIN
+ IF code_size IS NULL OR code_size=0 THEN
+    code_size := (array[38,23,18,12,9])[code_digit_bits];
+ END IF;
+ WHILE safe_loop<200 AND cardinality(chars) < code_size LOOP
+   IF bitsTotal % 2 = 0 THEN
+     mid := (max_y + min_y) / 2.0;
+     IF y > mid THEN
+       hash_value := (hash_value << 1) + 1;
+       min_y := mid;
+     ELSE
+       hash_value := (hash_value << 1) + 0;
+       max_y := mid;
+     END IF;
+   ELSE -- \bitsTotal
+     mid := (max_x + min_x) / 2.0;
+     IF x > mid THEN
+       hash_value := (hash_value << 1) + 1;
+       min_x := mid;
+     ELSE
+       hash_value := (hash_value << 1) + 0;
+       max_x := mid;
+     END IF;
+   END IF; -- \bitsTotal
+   safe_loop := safe_loop + 1; -- new
+   -- RAISE NOTICE '-- %. mid=% (% to % x=%) %bits.',safe_loop,mid,min_y,max_y,y,bits;
+   bits := bits + 1;
+   bitsTotal := bitsTotal +1;
+   IF bits = code_digit_bits THEN
+     digit := substr(code_digits_alphabet, hash_value+1, 1);
+     chars := array_append(chars, digit);
+     bits := 0;
+     hash_value := 0;
+   END IF;
+ END LOOP; -- \chars
+ RETURN  jsonb_build_object('code',array_to_string(chars,''), 'box',array[min_x, min_y, max_x, max_y]);
+END
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+
+
+
 CREATE or replace FUNCTION str_ggeohash_encode(
    x float,
    y float,
@@ -243,4 +306,41 @@ CREATE or replace FUNCTION str_ggeohash_uv_decode_box(
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_uv_decode_box
   IS 'Wrap for str_ggeohash_decode_box(), returning normalized UV coordinates.'
+;
+
+CREATE or replace FUNCTION str_ggeohash_draw_cell_bycenter(
+  cx int,  -- Center X
+  cy int,  -- Center Y
+  r int,   -- halfside ou raio do circulo inscrito
+  p_translate boolean DEFAULT false, -- true para converter em LatLong (WGS84 sem projeção)
+  p_srid int DEFAULT 952019          -- SRID da grade (default IBGE)
+) RETURNS geometry AS $f$
+SELECT CASE WHEN p_translate THEN ST_Transform(geom,4326) ELSE geom END
+FROM (
+  SELECT ST_GeomFromText( format(
+    'POLYGON((%s %s,%s %s,%s %s,%s %s,%s %s))',
+    cx-r,cy-r, cx-r,cy+r, cx+r,cy+r, cx+r,cy-r, cx-r,cy-r
+  ), p_srid) AS geom
+) t
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_draw_cell_bycenter(int,int,int,boolean,int)
+  IS 'Draws a square-cell centered on the requested point, with requested radius (half side) and optional translation and SRID.'
+;
+
+CREATE or replace FUNCTION str_ggeohash_draw_cell_bybox(
+  b float[],  -- bbox [min_x, min_y, max_x, max_y]
+  p_translate boolean DEFAULT false, -- true para converter em LatLong (WGS84 sem projeção)
+  p_srid int DEFAULT 952019          -- SRID da grade (default IBGE)
+) RETURNS geometry AS $f$
+SELECT CASE WHEN p_translate THEN ST_Transform(geom,4326) ELSE geom END
+FROM (
+  SELECT ST_GeomFromText( format(
+    'POLYGON((%s %s,%s %s,%s %s,%s %s,%s %s))',
+    b[1],b[2], b[1],b[4], b[3],b[4], b[3],b[2], b[1],b[2]
+    -- min_x,min_y, min_x,max_y, max_x,max_y, max_x,min_y, min_x,min_y
+  ), p_srid) AS geom
+) t
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_draw_cell_bycenter(int,int,int,boolean,int)
+  IS 'Draws a square-cell from BBOX.'
 ;
