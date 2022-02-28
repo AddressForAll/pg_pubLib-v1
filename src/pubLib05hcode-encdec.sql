@@ -30,13 +30,13 @@ CREATE or replace FUNCTION str_ggeohash_encode(
    max_y float default 180.
 ) RETURNS text as $f$
 DECLARE
- chars text[]  := array[]::text[];
- bits int      := 0;
- bitsTotal int := 0;
- hash_value int := 0;
- mid float;
- digit char;
- safe_loop int := 0;
+ chars      text[]  := array[]::text[];
+ bits       int     := 0;
+ bitsTotal  int     := 0;
+ hash_value int     := 0;
+ safe_loop  int     := 0;
+ mid        float;
+ digit      char;
 BEGIN
  IF code_size IS NULL OR code_size=0 THEN
     code_size := (array[38,23,18,12,9])[code_digit_bits];
@@ -62,6 +62,7 @@ BEGIN
      END IF;
    END IF; -- \bitsTotal
    safe_loop := safe_loop + 1; -- new
+   -- RAISE NOTICE '-- %. mid=% (% to % x=%) %bits.',safe_loop,mid,min_y,max_y,y,bits;
    bits := bits + 1;
    bitsTotal := bitsTotal +1;
    IF bits = code_digit_bits THEN
@@ -74,8 +75,8 @@ BEGIN
  RETURN  array_to_string(chars,''); -- code
 END
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
-COMMENT ON FUNCTION str_ggeohash_encode
-  IS 'Encondes LatLon as Generalized Geohash. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
+COMMENT ON FUNCTION str_ggeohash_encode(float, float, integer, integer, text, float, float, float, float)
+  IS 'Encondes LatLon WGS84 as Generalized Geohash. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
 ;
 
 CREATE or replace FUNCTION str_ggeohash_encode(
@@ -86,8 +87,13 @@ CREATE or replace FUNCTION str_ggeohash_encode(
    code_digits_alphabet text,
    bbox float[]
 ) RETURNS text as $f$
-   SELECT str_ggeohash_encode(x,y,code_size,code_digit_bits,code_digits_alphabet,bbox[1],bbox[2],bbox[3],bbox[4])
+   SELECT str_ggeohash_encode($1, $2, $3, $4, $5, bbox[1], bbox[2], bbox[3], bbox[4])
 $f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_encode(float, float, integer, integer, text, float[])
+  IS 'Wrap for str_ggeohash_encode(...,float,float,float,float).'
+;
+
+-- -- --
 
 CREATE or replace FUNCTION str_ggeohash_decode_box(
    code text,
@@ -135,20 +141,12 @@ BEGIN
    RETURN array[min_x, min_y, max_x, max_y];
 END
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
-COMMENT ON FUNCTION str_ggeohash_decode_box
+COMMENT ON FUNCTION str_ggeohash_decode_box(text, integer, jsonb, float, float, float, float)
   IS 'Decodes string of a Generalized Geohash into a bounding Box that matches it. Returns a four-element array: [minlat, minlon, maxlat, maxlon]. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
 ;
 
-
--- -- -- -- -- -- -- -- -- --
--- Wrap and helper functions:
-
-CREATE or replace FUNCTION str_geouri_decode(uri text) RETURNS float[] as $f$
-  SELECT regexp_split_to_array(regexp_replace(uri,'^geo:','','i'),',')::float[]
-$f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION str_geouri_decode(text)
-  IS 'Decodes standard GeoURI of latitude and longitude into float array.'
-;
+------------------------------
+--- Classic Geohash functions:
 
 CREATE or replace FUNCTION str_geohash_encode(
  latitude float,
@@ -159,6 +157,18 @@ CREATE or replace FUNCTION str_geohash_encode(
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geohash_encode(float,float,int)
   IS 'Encondes LatLon as classic Geohash of Niemeyer 2008.'
+;
+
+CREATE or replace FUNCTION str_ggeohash_decode_box(
+   code text,                 -- 1
+   code_digit_bits int,       -- 2
+   code_digits_lookup jsonb,  -- 3
+   bbox float[]
+) RETURNS float[] as $wrap$
+  SELECT str_ggeohash_decode_box($1, $2, $3, bbox[1], bbox[2], bbox[3], bbox[4])
+$wrap$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_decode_box(text, integer, jsonb, float[])
+  IS 'Wrap for str_ggeohash_decode_box(...,float,float,float,float).'
 ;
 
 CREATE or replace FUNCTION str_geohash_decode(
@@ -175,16 +185,14 @@ COMMENT ON FUNCTION str_geohash_encode(float,float,int)
   IS 'Decodes classic Geohash (of Niemeyer 2008) to latitude and longitude, optionally adding error to the array.'
 ;
 
-----
+-- -- -- -- -- -- -- -- -- --
+-- Wrap and helper functions:
 
-CREATE or replace FUNCTION str_geohash_encode(
-  latLon float[],
-  code_size int default NULL
-) RETURNS text as $wrap$
-  SELECT str_geohash_encode(latLon[1],latLon[2],code_size)
-$wrap$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION str_geohash_encode(float[],int)
-  IS 'Wrap for str_geohash_encode() with array input.'
+CREATE or replace FUNCTION str_geouri_decode(uri text) RETURNS float[] as $f$
+  SELECT regexp_split_to_array(regexp_replace(uri,'^geo:','','i'),',')::float[]
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION str_geouri_decode(text)
+  IS 'Decodes standard GeoURI of latitude and longitude into float array.'
 ;
 
 CREATE or replace FUNCTION str_geohash_encode(
@@ -197,8 +205,20 @@ COMMENT ON FUNCTION str_geohash_encode(text)
   IS 'Wrap for str_geohash_encode() with text GeoURI input.'
 ;
 
+CREATE or replace FUNCTION str_geohash_encode(
+  latLon float[],
+  code_size int default NULL
+) RETURNS text as $wrap$
+  SELECT str_geohash_encode(latLon[1],latLon[2],code_size)
+$wrap$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION str_geohash_encode(float[],int)
+  IS 'Wrap for str_geohash_encode() with array input.'
+;
+
 -------------------------------------
------ using UV normalized coordinates
+----- Using UV normalized coordinates
+
+-- pending XY_to_UV(x,y,bbox) and UV_to_XY(u,v,bbox)
 
 CREATE or replace FUNCTION str_ggeohash_uv_encode(
    u float,  -- 0.0 to 1.0, normalized X.
@@ -208,7 +228,7 @@ CREATE or replace FUNCTION str_ggeohash_uv_encode(
    code_digits_alphabet text default '0123456789BCDFGHJKLMNPQRSTUVWXYZ'
 	-- see base32nvU at http://addressforall.org/_foundations/art1.pdf
 ) RETURNS text as $wrap$
-   SELECT str_ggeohash_encode(u, v, code_size, code_digit_bits, code_digits_alphabet, 0.0, 0.0, 1.0, 1.0)
+   SELECT str_ggeohash_encode($1, $2, $3, $4, $5, 0.0, 0.0, 1.0, 1.0)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_uv_encode
   IS 'Wrap for str_ggeohash_encode() with normalized UV coordinates.'
@@ -219,7 +239,7 @@ CREATE or replace FUNCTION str_ggeohash_uv_decode_box(
    code_digit_bits int default 5,  -- 5 for base32, 4 for base16 or 2 for base4
    code_digits_lookup jsonb  default '{"0":0, "1":1, "2":2, "3":3, "4":4, "5":5, "6":6, "7":7, "8":8, "9":9, "b":10, "c":11, "d":12, "f":13, "g":14, "h":15, "j":16, "k":17, "l":18, "m":19, "n":20, "p":21, "q":22, "r":23, "s":24, "t":25, "u":26, "v":27, "w":28, "x":29, "y":30, "z":31}'::jsonb
 ) RETURNS float[] as $wrap$
-   SELECT str_ggeohash_decode_box(code, code_digit_bits, code_digits_lookup, 0.0, 0.0, 1.0, 1.0)
+   SELECT str_ggeohash_decode_box($1, $2, $3, 0.0, 0.0, 1.0, 1.0)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_uv_decode_box
   IS 'Wrap for str_ggeohash_decode_box(), returning normalized UV coordinates.'

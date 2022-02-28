@@ -22,6 +22,7 @@ all:
 	psql $(pg_uri) < pubLib04-aggregate.sql
 	@echo "... Installing functions level 05:"
 	psql $(pg_uri) < pubLib05hcode-distrib.sql
+	psql $(pg_uri) < pubLib05hcode-encdec.sql
 	psql $(pg_uri) < pubLib05pgis-extraSRID.sql
 	psql $(pg_uri) < pubLib05pgis-geohash.sql
 	psql $(pg_uri) < pubLib05xml-general.sql
