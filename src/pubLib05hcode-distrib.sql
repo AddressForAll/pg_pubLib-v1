@@ -466,3 +466,82 @@ CREATE or replace FUNCTION hcode_signature_reduce(
   SELECT jsonb_object_agg(hcode, n_items)
   FROM hcode_signature_reduce_recursive_raw($1,$2,$3,(hcode_parameters->'p_percentile')::real,(hcode_parameters->'p_heuristic')::int)
 $wrap$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
+    p_j             jsonB,            -- 1. input pairs {$hcode:$n_items}
+    p_left_erode    int DEFAULT 1,    -- 2. number of charcters to drop from left to right
+    p_size_min      int DEFAULT 1,    -- 3. minimal size of hcode
+    p_threshold_sum int DEFAULT NULL, -- 4. byte size of bucket
+    p_size_max      int DEFAULT 1     -- 5. max size of hcode
+) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j boolean, jj text[]) AS $f$
+    WITH preproc AS (
+        SELECT  CASE
+                    WHEN cum_amt < p_threshold_sum THEN substr(hcode,1,size)
+                    ELSE hcode
+                END AS hcode,
+                SUM(n)::int AS n,
+                percentile_disc(0.5) WITHIN GROUP (ORDER BY n) AS mdn_items,
+                COUNT(*)::int AS n_keys,
+                array_agg(hcode) as hcode_agg
+        FROM (
+            SELECT  hcode,
+                    n::int n,
+                    length(hcode)-(p_size_max-p_size_min) AS size,
+                    sum(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min)) ORDER BY hcode) AS cum_amt
+            FROM  jsonb_each(p_j) t(hcode,n) 
+            WHERE length(hcode)-(p_size_max-p_size_min) >= 0
+        ) t
+        GROUP BY 1
+    )
+    SELECT hcode,
+            n,
+            mdn_items,
+            n_keys,
+            CASE
+                WHEN length(hcode) = $3 THEN TRUE
+                ELSE FALSE
+            END AS j,
+            hcode_agg
+    FROM preproc
+    ORDER BY 1
+$f$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt2(
+    p_j             jsonB,            -- 1. input pairs {$hcode:$n_items}
+    p_left_erode    int DEFAULT 1,    -- 2. number of charcters to drop from left to right
+    p_size_min      int DEFAULT 1,    -- 3. minimal size of hcode
+    p_threshold_sum int DEFAULT NULL, -- 4. byte size of bucket
+    p_size_max      int DEFAULT 1     -- 5. max size of hcode
+) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j boolean, jj text[]) AS $f$
+    DECLARE
+        lst_recursive text;
+        lst_pre       text;
+    BEGIN
+
+    IF p_size_min = p_size_max THEN
+        RETURN QUERY
+            SELECT *
+            FROM hcode_distribution_reduce_pre_raw_alt2( p_j, p_left_erode, p_size_min, p_threshold_sum, p_size_max );
+    ELSE
+        lst_pre       := format('%L::jsonB, %s, %s, %s, %s',  p_j::text, p_left_erode::text,  p_size_min::text,    p_threshold_sum::text, p_size_max::text);
+        lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s $$,            p_left_erode::text, (p_size_min+1)::text, p_threshold_sum::text, p_size_max::text);
+
+        RETURN QUERY EXECUTE format($$
+            WITH t AS (
+                SELECT * FROM hcode_distribution_reduce_pre_raw_alt2(%1$s)
+            )
+            SELECT  *
+            FROM t
+            WHERE t.j IS TRUE
+
+            UNION ALL
+
+            SELECT *
+            FROM hcode_distribution_reduce_recursive_raw_alt2( (SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS FALSE), %2$s )
+        $$,
+        lst_pre,      -- %$1 = p1 p_j p2 left_erode, p3 size_min, p4 threshold_sum, p5 p_size_max
+        lst_recursive -- %$2 =        p2 left_erode, p3 size_min, p4 threshold_sum, p5 p_size_max
+        );
+    END IF;
+END;
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
