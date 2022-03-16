@@ -59,3 +59,10 @@ CREATE or replace FUNCTION str_urldecode(p text) RETURNS text AS $f$
 FROM regexp_matches($1, '%[0-9a-f][0-9a-f]|.', 'gi') AS r(m);
   -- adapted from https://stackoverflow.com/a/8494602/287948
 $f$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION lexname_to_unix(p_lexname text) RETURNS text AS $$
+  SELECT string_agg(initcap(p),'') FROM regexp_split_to_table($1,'\.') t(p)
+$$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION lexname_to_unix(text)
+  IS 'Convert URN LEX jurisdiction string to camel-case filename for Unix-like file systems.'
+;
