@@ -480,20 +480,20 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
                 n::int n,
                 length(hcode)-(p_size_max-p_size_min) AS size,
                 SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ORDER BY hcode) AS sum_hcodea,
-                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ORDER BY hcode) AS sum_hcodeb
+                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)) ORDER BY hcode) AS sum_hcodeb
         FROM  jsonb_each(p_j) t(hcode,n) 
         WHERE length(hcode)-(p_size_max-p_size_min) >= 0
     ),
     b AS (
         SELECT *,
                MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ) AS max_hcodea,
-               MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ) AS max_hcodeb
+               MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)) ) AS max_hcodeb
         FROM a
     ),
     c AS (
         SELECT hcode,
                substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) hcodea,
-               substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) hcodeb,
+               substr(hcode,1,length(hcode)) hcodeb,
                max_hcodea,
                max_hcodeb
         FROM b
@@ -521,7 +521,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
         FROM b
         LEFT JOIN e
         ON      e.hcodea=substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) 
-            AND e.hcodeb=substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) 
+            AND e.hcodeb=substr(hcode,1,length(hcode))
     ),
     g AS (
         SELECT  CASE
