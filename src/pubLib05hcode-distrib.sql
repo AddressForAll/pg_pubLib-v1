@@ -467,7 +467,7 @@ CREATE or replace FUNCTION hcode_signature_reduce(
   FROM hcode_signature_reduce_recursive_raw($1,$2,$3,(hcode_parameters->'p_percentile')::real,(hcode_parameters->'p_heuristic')::int)
 $wrap$ LANGUAGE SQL IMMUTABLE;
 
-CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
+CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
     p_j             jsonB,            -- 1. input pairs {$hcode:$n_items}
     p_left_erode    int DEFAULT 1,    -- 2. number of charcters to drop from left to right
     p_size_min      int DEFAULT 1,    -- 3. minimal size of hcode
@@ -480,20 +480,20 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
                 n::int n,
                 length(hcode)-(p_size_max-p_size_min) AS size,
                 SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ORDER BY hcode) AS sum_hcodea,
-                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)) ORDER BY hcode) AS sum_hcodeb
+                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)/*-(p_size_max-p_size_min-1)*/) ORDER BY hcode) AS sum_hcodeb
         FROM  jsonb_each(p_j) t(hcode,n) 
         WHERE length(hcode)-(p_size_max-p_size_min) >= 0
     ),
     b AS (
         SELECT *,
                MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ) AS max_hcodea,
-               MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)) ) AS max_hcodeb
+               MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)/*-(p_size_max-p_size_min-1)*/) ) AS max_hcodeb
         FROM a
     ),
     c AS (
         SELECT hcode,
                substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) hcodea,
-               substr(hcode,1,length(hcode)) hcodeb,
+               substr(hcode,1,length(hcode)/*-(p_size_max-p_size_min-1)*/) hcodeb,
                max_hcodea,
                max_hcodeb
         FROM b
@@ -521,7 +521,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
         FROM b
         LEFT JOIN e
         ON      e.hcodea=substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) 
-            AND e.hcodeb=substr(hcode,1,length(hcode))
+            AND e.hcodeb=substr(hcode,1,length(hcode)/*-(p_size_max-p_size_min-1)*/)
     ),
     g AS (
         SELECT  CASE
@@ -549,7 +549,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt2(
     ORDER BY 1
 $f$ LANGUAGE SQL IMMUTABLE;
 
-CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt2(
+CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
     p_j             jsonB,            -- 1. input pairs {$hcode:$n_items}
     p_left_erode    int DEFAULT 1,    -- 2. number of charcters to drop from left to right
     p_size_min      int DEFAULT 1,    -- 3. minimal size of hcode
@@ -564,14 +564,14 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt2(
     IF p_size_min = p_size_max THEN
         RETURN QUERY
             SELECT *
-            FROM hcode_distribution_reduce_pre_raw_alt2( p_j, p_left_erode, p_size_min, p_threshold_sum, p_size_max );
+            FROM hcode_distribution_reduce_pre_raw_alt( p_j, p_left_erode, p_size_min, p_threshold_sum, p_size_max );
     ELSE
         lst_pre       := format('%L::jsonB, %s, %s, %s, %s',  p_j::text, p_left_erode::text,  p_size_min::text,    p_threshold_sum::text, p_size_max::text);
         lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s $$,            p_left_erode::text, (p_size_min+1)::text, p_threshold_sum::text, p_size_max::text);
 
         RETURN QUERY EXECUTE format($$
             WITH t AS (
-                SELECT * FROM hcode_distribution_reduce_pre_raw_alt2(%1$s)
+                SELECT * FROM hcode_distribution_reduce_pre_raw_alt(%1$s)
             )
             SELECT  *
             FROM t
@@ -580,11 +580,45 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt2(
             UNION ALL
 
             SELECT *
-            FROM hcode_distribution_reduce_recursive_raw_alt2( (SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS FALSE), %2$s )
+            FROM hcode_distribution_reduce_recursive_pre_raw_alt( (SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS FALSE), %2$s )
         $$,
         lst_pre,      -- %$1 = p1 p_j p2 left_erode, p3 size_min, p4 threshold_sum, p5 p_size_max
         lst_recursive -- %$2 =        p2 left_erode, p3 size_min, p4 threshold_sum, p5 p_size_max
         );
     END IF;
+END;
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+
+
+CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt(
+    p_j             jsonB,               -- 1. input pairs {$hcode:$n_items}
+    p_left_erode    int    DEFAULT 1,    -- 2. number of charcters to drop from left to right
+    p_size_min      int    DEFAULT 1,    -- 3. minimal size of hcode
+    p_threshold_sum int    DEFAULT NULL, -- 4. byte size of bucket
+    p_size_max      int    DEFAULT 1,    -- 5. max size of hcode
+    p_threshold_min int    DEFAULT 1000  -- 6. minimum value. default value refers to points
+) RETURNS TABLE (hcode text, n_items bigint, mdn_items bigint, n_keys bigint, j boolean, jj text[]) AS $f$
+    BEGIN
+        RETURN QUERY
+            SELECT  s.hcode,
+                    SUM(s.n_items) AS n_items,
+                    MAX(s.mdn_items::bigint) AS mdn_items,
+                    SUM(s.n_keys) AS n_keys,
+                    TRUE,
+                    array_concat_agg(s.jj)
+            FROM (
+                SELECT  CASE
+                            WHEN r.n_items < p_threshold_min
+                            THEN substr(r.hcode,1,length(r.hcode)-1)
+                            ELSE r.hcode
+                        END AS hcode,
+                        r.n_items,
+                        r.mdn_items,
+                        r.n_keys,
+                        r.j,
+                        r.jj
+                FROM hcode_distribution_reduce_recursive_pre_raw_alt( p_j, p_left_erode, p_size_min, p_threshold_sum, p_size_max ) r
+            ) s
+            GROUP BY 1;
 END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;

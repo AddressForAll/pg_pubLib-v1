@@ -192,6 +192,13 @@ CREATE or replace FUNCTION array_cat_distinct(a anyarray, b anyarray) RETURNS an
   ) END
 $f$  LANGUAGE SQL IMMUTABLE;
 
+
+-- https://stackoverflow.com/a/46849678
+CREATE AGGREGATE array_concat_agg(anycompatiblearray) (
+  SFUNC = array_cat,
+  STYPE = anycompatiblearray
+);
+
 -----------
 
 
