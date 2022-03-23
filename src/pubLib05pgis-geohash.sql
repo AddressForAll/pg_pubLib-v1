@@ -19,6 +19,24 @@ COMMENT ON FUNCTION geohash_GeomsFromPrefix
   IS 'Return a Geohash grid, the quadrilateral geometry of each child-cell and its geocode. The parameter is the Geohash the parent-cell, that will be a prefix for all child-cells.'
 ;
 
+CREATE or replace FUNCTION geohash_cover(
+  input_geom geometry, 
+  input_prefix text DEFAULT ''
+) RETURNS text[] AS $f$
+  SELECT CASE
+     WHEN ghs0>'' THEN CASE WHEN ghs0 LIKE input_prefix||'%' THEN array[ghs0] ELSE NULL END
+     ELSE (
+       SELECT array_agg(ghs) 
+       FROM geohash_GeomsFromPrefix(input_prefix) t
+       WHERE ST_Intersects(t.geom,input_geom)   
+     ) END
+  FROM (SELECT ST_GeoHash(input_geom) AS ghs0) t0  
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_cover
+  IS 'Geohash list of covering Geohashes, assuming a region delimited by the prefix. Returns null for incompatible prefixes, and 32 itens from prefix-contained geometry.'
+;
+-- SELECT geohash_covercells(geom,'6') FROM countries WHERE iso_a2='BR';
+
 -------------
 CREATE or replace FUNCTION geohash_GeomsMosaic(ghs_array text[], geom_mask geometry DEFAULT null)
 RETURNS TABLE(ghs text, lghs int, geom geometry) AS $f$
