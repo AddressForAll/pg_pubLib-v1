@@ -21,10 +21,12 @@ COMMENT ON FUNCTION geohash_GeomsFromPrefix
 
 CREATE or replace FUNCTION geohash_cover(
   input_geom geometry, 
-  input_prefix text DEFAULT ''
+  input_prefix text DEFAULT '',
+  force_scan boolean DEFAULT true
 ) RETURNS text[] AS $f$
   SELECT CASE
-     WHEN ghs0>'' THEN CASE WHEN ghs0 LIKE input_prefix||'%' THEN array[ghs0] ELSE NULL END
+     WHEN ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) THEN 
+        CASE WHEN ghs0 LIKE input_prefix||'%' THEN array[ghs0] ELSE NULL END
      ELSE (
        SELECT array_agg(ghs) 
        FROM geohash_GeomsFromPrefix(input_prefix) t
