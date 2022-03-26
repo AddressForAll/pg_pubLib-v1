@@ -32,7 +32,7 @@ select geohash_cover_contains(geom,'6g') br_geom;
 -- {"6g0": false, "6g1": false, "6g3": false, "6g4": true, "6g5": true, "6g6": true, "6g7": true, "6g8": false, ...}
 ```
 
-Podemos estabelecer um número máximo de dígitos, mantendo apenas os geohashes indicados como *false* (não totalmente contidos no Brasil), e obter todos eles por recorrência. A ilustração abaixo mostra o resultado no QGIS sobrepondo as geometrias recortadas (cuT) às geometrias de célula puras (boxes).
+Podemos estabelecer um número máximo de dígitos, mantendo apenas os geohashes indicados como *false* (não totalmente contidos no Brasil), e obter todos eles por recorrência. A ilustração abaixo mostra o resultado no QGIS sobrepondo as geometrias recortadas (cut) às geometrias de célula puras (boxes).
 
 ```sql
 CREATE qgis_output1_boxes AS
@@ -58,12 +58,21 @@ select geohash_cover(geom,'75cm') from  ingest.fdw_jurisdiction_geom where isola
 -- {75cm5,75cm6,75cm7,75cmd,75cme,75cmf,75cmg,75cmh,75cmk,75cmm,75cms,75cmt,75cmu,75cmv,75cmw}
 ```
 
-### Mosaicos de distribuição
+### Mosaicos de distribuição balanceada
 
 Resumo dos requsitos de uma distribuição balanceada pelo tamanho dos arquivos formados por conjuntos de geometrias, tentando primeiro pelos Geohashes de maior área (menos dígitos), depois recorrentemente os seus filhos:
+
 - Se pai pode conter tudo (ocupa menos que size_max), resolvido, ficamos com ele e fim.
 - Senão pai é distribuída em filhos e pai absorve "poeira" (filhos com menos que  size_min).
 - A cada filho grande demais (mais que size_max), recorrência usando ele como pai.
 - A recorrência também encerra se número de dígitos Geohash passarem do limite (ghs_len).
 
-... mostrar implementação ...
+Temos dois tipos de geometria aqui: a geometria da "máscara", dos limites da jurisdição, como nos exemplos acima, e as geometrias da distribuição.
+
+Decisões de projeto:
+
+1. O conjunto das geometrias da distribuição pode ser substituído por células geohash pequenas, que serão depois agrupadas por prefixo. O tamanho em bytes do grupo também pode ser calculado.
+
+2. Estratégia de implementação: criar uma nova versão da função `geohash_cover_geom()` que aceite mais um parâmetro, a distribuição, e retorne mais uma coluna, contendo a estimativa em bytes.
+
+...
