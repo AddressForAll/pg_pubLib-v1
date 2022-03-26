@@ -20,24 +20,82 @@ COMMENT ON FUNCTION geohash_GeomsFromPrefix
 ;
 
 CREATE or replace FUNCTION geohash_cover(
-  input_geom geometry, 
+  input_geom geometry,
   input_prefix text DEFAULT '',
   force_scan boolean DEFAULT true
 ) RETURNS text[] AS $f$
   SELECT CASE
-     WHEN ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) THEN 
+     WHEN ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) THEN
         CASE WHEN ghs0 LIKE input_prefix||'%' THEN array[ghs0] ELSE NULL END
      ELSE (
-       SELECT array_agg(ghs) 
+       SELECT array_agg(ghs)
        FROM geohash_GeomsFromPrefix(input_prefix) t
-       WHERE ST_Intersects(t.geom,input_geom)   
+       WHERE ST_Intersects(t.geom,input_geom)
      ) END
-  FROM (SELECT ST_GeoHash(input_geom) AS ghs0) t0  
+  FROM (SELECT ST_GeoHash(input_geom) AS ghs0) t0
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION geohash_cover
   IS 'Geohash list of covering Geohashes, assuming a region delimited by the prefix. Returns null for incompatible prefixes, and 32 itens from prefix-contained geometry.'
 ;
--- SELECT geohash_covercells(geom,'6') FROM countries WHERE iso_a2='BR';
+-- SELECT geohash_cover(geom,'6') FROM countries WHERE iso_a2='BR';
+
+CREATE or replace FUNCTION geohash_cover_geom(
+  input_geom geometry,
+  input_prefix text DEFAULT '',
+  cut boolean DEFAULT false,
+  force_scan boolean DEFAULT true
+) RETURNS TABLE(ghs text, is_contained boolean, geom geometry)  AS $f$
+  WITH t0 AS (
+    SELECT ghs0, ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) AS test0
+    FROM ( SELECT ST_GeoHash(input_geom) ) t(ghs0)
+  )
+   SELECT ghs0,
+             false AS is_contained,
+             CASE WHEN cut THEN input_geom ELSE ST_SetSRID(ST_GeomFromGeoHash(ghs0),4326) END  AS geom
+   FROM t0
+   WHERE test0 AND ghs0 LIKE input_prefix||'%'
+  UNION ALL
+   SELECT ghs,
+             ST_Contains(input_geom,t1.geom) AS is_contained,
+             CASE WHEN cut THEN ST_Intersection(input_geom,t1.geom) ELSE t1.geom END AS geom
+   FROM geohash_GeomsFromPrefix(input_prefix) t1, t0
+   WHERE NOT(t0.test0) AND ST_Intersects(t1.geom,input_geom)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_cover_geom
+  IS 'Geometry of geohash_cover() list, assuming a region delimited by the prefix.'
+;
+-- SELECT row_number() OVER () as gid, g.* FROM countries c, LATERAL geohash_cover_geom(c.geom,'6') g WHERE c.iso_a2='BR';
+
+CREATE or replace FUNCTION geohash_cover_contains(
+  input_geom geometry,
+  input_prefix text DEFAULT '',
+  force_scan boolean DEFAULT true
+) RETURNS jsonb AS $wrap$
+  SELECT jsonb_object_agg(ghs,is_contained)
+  FROM geohash_cover_geom(input_geom,input_prefix,false,force_scan)
+$wrap$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_cover_contains
+  IS 'Geohash jsonb object (geocode-is_contained pairs) of covering Geohashes, a wrap for geohash_cover_geom function.'
+;
+-- SELECT geohash_cover_contains(geom,'6') FROM countries WHERE iso_a2='BR';
+
+CREATE or replace FUNCTION geohash_cover_noncontained_recursive(
+  input_geom geometry,
+  ghs_len int default 3,
+  cut boolean DEFAULT false,
+  prefix0 text DEFAULT ''
+) RETURNS TABLE(ghs text, geom geometry) AS $f$
+
+ WITH RECURSIVE rcover(ghs, is_contained, geom) AS (
+   SELECT * FROM geohash_cover_geom(input_geom,prefix0,cut) t0
+  UNION ALL
+   SELECT c.* FROM rcover, LATERAL geohash_cover_geom(input_geom,rcover.ghs,cut) c
+   WHERE length(rcover.ghs)<ghs_len AND NOT(c.is_contained) AND NOT(rcover.is_contained)
+ )
+ SELECT ghs, geom FROM rcover WHERE length(ghs)=ghs_len;
+
+$f$ LANGUAGE SQL;
+-- create table lix AS SELECT * FROM geohash_cover_noncontained_recursive( (SELECT geom FROM ingest.fdw_jurisdiction_geom where isolabel_ext='BR') );
 
 -------------
 CREATE or replace FUNCTION geohash_GeomsMosaic(ghs_array text[], geom_mask geometry DEFAULT null)
@@ -102,7 +160,7 @@ CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(
 )
 RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
   SELECT ghs
-         ,info || COALESCE( 
+         ,info || COALESCE(
             (SELECT jsonb_object_agg(
                  CASE WHEN substr(opt,1,7)='density' THEN (opts->>opt)||'_'||opt ELSE opt END,
                  CASE opt

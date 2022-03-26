@@ -14,6 +14,74 @@
  * license: CC0
  */
 
+----------------
+------ Criar publib04 vbit!  falta baseh_to_vbit
+
+/**
+ * Converts bit string to text, using base2h, base4h, base8h or base16h.
+ * Uses letters "G" and "H" to sym44bolize non strandard bit strings (0 for44 bases44)
+ * Uses extended alphabet (with no letter I,O,U W or X) for base8h and base16h.
+ * @see http://osm.codes/_foundations/art1.pdf
+ * @version 1.0.1.
+ */
+CREATE FUNCTION vbit_to_baseh(
+  p_val varbit,  -- input
+  p_base int DEFAULT 4, -- selecting base2h, base4h, base8h, or base16h.
+  p_size int DEFAULT 0
+) RETURNS text AS $f$
+DECLARE
+    vlen int;
+    pos0 int;
+    ret text := '';
+    blk varbit;
+    blk_n int;
+    bits_per_digit int;
+    tr int[] := '{ {1,2,0,0}, {1,3,4,0}, {1,3,5,6} }'::int[]; -- --4h(bits,pos), 8h(bits,pos)
+    tr_selected JSONb;
+    trtypes JSONb := '{"2":[1,1], "4":[1,2], "8":[2,3], "16":[3,4]}'::JSONb; -- TrPos,bits
+    trpos int;
+    baseh "char"[] := array[
+      '[0:15]={G,H,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --1. 4h,8h,16h 1bit
+      '[0:15]={0,1,2,3,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --2. 4h 2bit
+      '[0:15]={J,K,L,M,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --3. 8h,16h 2bit
+      '[0:15]={0,1,2,3,4,5,6,7,x,x,x,x,x,x,x,x}'::"char"[], --4. 8h 3bit
+      '[0:15]={N,P,Q,R,S,T,V,Z,x,x,x,x,x,x,x,x}'::"char"[], --5. 16h 3bit
+      '[0:15]={0,1,2,3,4,5,6,7,8,9,a,b,c,d,e,f}'::"char"[]  --6. 16h 4bit
+    ]; -- jumpping I,O and U,W,X letters!
+       -- the standard alphabet is https://tools.ietf.org/html/rfc4648#section-6
+BEGIN
+  vlen := bit_length(p_val);
+  tr_selected := trtypes->(p_base::text);
+  IF p_val IS NULL OR tr_selected IS NULL OR vlen=0 THEN
+    RETURN NULL; -- or  p_retnull;
+  END IF;
+  IF p_base=2 THEN
+    RETURN $1::text; --- direct bit string as string
+  END IF;
+  bits_per_digit := (tr_selected->>1)::int;
+  blk_n := vlen/bits_per_digit;  -- poderia controlar p_size por aqui
+  pos0  := (tr_selected->>0)::int;
+  trpos := tr[pos0][bits_per_digit];
+  FOR counter IN 1..blk_n LOOP
+      blk := substring(p_val FROM 1 FOR bits_per_digit);
+      ret := ret || baseh[trpos][ varbit_to_int(blk,bits_per_digit) ];
+      p_val := substring(p_val FROM bits_per_digit+1); -- same as p_val<<(bits_per_digit*blk_n)
+  END LOOP;
+  vlen := bit_length(p_val);
+  IF p_val!=b'' THEN -- vlen % bits_per_digit>0
+    trpos := tr[pos0][vlen];
+    ret := ret || baseh[trpos][ varbit_to_int(p_val,vlen) ];
+  END IF;
+  IF p_size>0 THEN
+    ret := substr(ret,1,p_size);
+  END IF;
+  RETURN ret;
+END
+$f$ LANGUAGE plpgsql IMMUTABLE;
+COMMENT ON FUNCTION vbit_to_baseh(varbit,int,int)
+ IS 'Encodes varbit (string of bits) into Base4h, Base8h or Base16h. See http://osm.codes/_foundations/art1.pdf'
+;
+
 -- -- -- -- -- --
 -- Main functions
 
