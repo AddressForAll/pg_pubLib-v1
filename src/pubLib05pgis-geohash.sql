@@ -18,86 +18,149 @@ $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION geohash_GeomsFromPrefix
   IS 'Return a Geohash grid, the quadrilateral geometry of each child-cell and its geocode. The parameter is the Geohash the parent-cell, that will be a prefix for all child-cells.'
 ;
-
+/*
 CREATE or replace FUNCTION geohash_cover(
   input_geom geometry,
-  input_prefix text DEFAULT '',
-  force_scan boolean DEFAULT true
+  input_prefix text  DEFAULT '',       -- Geohash prefix to enforce only equal or contained cells
+  onlycontained boolean DEFAULT NULL,  -- true=interior cells; false=contour cells; NULL=both.
+  force_scan boolean DEFAULT true      -- rare use, on non-recusive context
 ) RETURNS text[] AS $f$
+  WITH t0 AS (
+    SELECT ghs0,
+           ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) AS test0,
+           onlycontained IS NULL                               AS must_both
+           onlycontained IS NOT NULL AND onlycontained         AS must_contained
+    FROM ( SELECT ST_GeoHash(input_geom) ) t(ghs0)
+  )
   SELECT CASE
-     WHEN ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) THEN
+     WHEN test0 THEN
         CASE WHEN ghs0 LIKE input_prefix||'%' THEN array[ghs0] ELSE NULL END
      ELSE (
        SELECT array_agg(ghs)
-       FROM geohash_GeomsFromPrefix(input_prefix) t
-       WHERE ST_Intersects(t.geom,input_geom)
+       FROM (
+         SELECT t.ghs,
+                ST_Contains(input_geom,t.geom) as is_contained
+         FROM geohash_GeomsFromPrefix(input_prefix) t
+         WHERE ST_Intersects(t.geom,input_geom)
+       ) t2, t0
+       WHERE t0.must_both
+         OR ( NOT(t0.must_contained) AND NOT(t2.is_contained) )
+         OR ( t0.must_contained AND t2.is_contained )
      ) END
-  FROM (SELECT ST_GeoHash(input_geom) AS ghs0) t0
+  FROM t0
 $f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION geohash_cover
-  IS 'Geohash list of covering Geohashes, assuming a region delimited by the prefix. Returns null for incompatible prefixes, and 32 itens from prefix-contained geometry.'
-;
--- SELECT geohash_cover(geom,'6') FROM countries WHERE iso_a2='BR';
+*/
 
-CREATE or replace FUNCTION geohash_cover_geom(
+CREATE or replace FUNCTION geohash_cover_geoms(
   input_geom geometry,
-  input_prefix text DEFAULT '',
-  cut boolean DEFAULT false,
-  force_scan boolean DEFAULT true
-) RETURNS TABLE(ghs text, is_contained boolean, geom geometry)  AS $f$
+  input_prefix text     DEFAULT '',
+  onlycontained boolean DEFAULT false,  -- true=interior cells; false=contour cells; NULL=both.
+  force_scan boolean    DEFAULT true    -- BUG? necessary?
+) RETURNS TABLE(ghs text, is_contained boolean, geom geometry, cut_geom geometry)  AS $f$
   WITH t0 AS (
-    SELECT ghs0, ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) AS test0
+    SELECT ghs0,
+           ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) AS test0,
+           onlycontained IS NULL                               AS must_both,
+           onlycontained IS NOT NULL AND onlycontained         AS must_contained
     FROM ( SELECT ST_GeoHash(input_geom) ) t(ghs0)
   )
-   SELECT ghs0,
-             false AS is_contained,
-             CASE WHEN cut THEN input_geom ELSE ST_SetSRID(ST_GeomFromGeoHash(ghs0),4326) END  AS geom
+   SELECT ghs0, false,
+          ST_SetSRID(ST_GeomFromGeoHash(ghs0),4326) AS geom,
+          input_geom AS cut_geom
    FROM t0
    WHERE test0 AND ghs0 LIKE input_prefix||'%'
-  UNION ALL
-   SELECT ghs,
-             ST_Contains(input_geom,t1.geom) AS is_contained,
-             CASE WHEN cut THEN ST_Intersection(input_geom,t1.geom) ELSE t1.geom END AS geom
-   FROM geohash_GeomsFromPrefix(input_prefix) t1, t0
-   WHERE NOT(t0.test0) AND ST_Intersects(t1.geom,input_geom)
+
+  UNION ALL  -- theoretically never duplicates
+
+   SELECT ghs, is_contained, geom, cut_geom
+   FROM (
+     SELECT ghs, t1.geom, t0.must_both, t0.must_contained,
+            ST_Intersection(input_geom,t1.geom) as cut_geom,
+            ST_Contains(input_geom,t1.geom) as is_contained
+     FROM geohash_GeomsFromPrefix(input_prefix) t1, t0
+     WHERE NOT(t0.test0) AND ST_Intersects(t1.geom,input_geom)
+   ) t2
+   WHERE must_both
+         OR ( NOT(must_contained) AND NOT(is_contained) )
+         OR ( must_contained AND is_contained )
 $f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION geohash_cover_geom
+COMMENT ON FUNCTION geohash_cover_geoms
   IS 'Geometry of geohash_cover() list, assuming a region delimited by the prefix.'
 ;
 -- SELECT row_number() OVER () as gid, g.* FROM countries c, LATERAL geohash_cover_geom(c.geom,'6') g WHERE c.iso_a2='BR';
 
-CREATE or replace FUNCTION geohash_cover_contains(
+CREATE or replace FUNCTION geohash_cover_list(
+  input_geom geometry,
+  input_prefix text  DEFAULT '',       -- Geohash prefix to enforce only equal or contained cells
+  onlycontained boolean DEFAULT NULL,  -- true=interior cells; false=contour cells; NULL=both.
+  force_scan boolean DEFAULT true      -- rare use, on non-recusive context
+) RETURNS text[] AS $wrap$
+  SELECT array_agg(ghs)
+  FROM geohash_cover_geoms($1,$2,$3,$4)
+$wrap$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_cover_list
+  IS 'Geohash list of covering Geohashes, assuming a region delimited by the prefix. Returns null for incompatible prefixes, and 32 itens from prefix-contained geometry.'
+;
+-- SELECT geohash_cover_list(geom,'6') FROM countries WHERE iso_a2='BR';
+
+CREATE or replace FUNCTION geohash_cover_testlist(
   input_geom geometry,
   input_prefix text DEFAULT '',
   force_scan boolean DEFAULT true
 ) RETURNS jsonb AS $wrap$
   SELECT jsonb_object_agg(ghs,is_contained)
-  FROM geohash_cover_geom(input_geom,input_prefix,false,force_scan)
+  FROM geohash_cover_geoms(input_geom, input_prefix, NULL, force_scan)
 $wrap$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION geohash_cover_contains
-  IS 'Geohash jsonb object (geocode-is_contained pairs) of covering Geohashes, a wrap for geohash_cover_geom function.'
+COMMENT ON FUNCTION geohash_cover_testlist
+  IS 'Geohash jsonb object (geocode-is_contained pairs) of covering Geohashes, a wrap for geohash_cover_geoms function.'
 ;
 -- SELECT geohash_cover_contains(geom,'6') FROM countries WHERE iso_a2='BR';
 
-CREATE or replace FUNCTION geohash_cover_noncontained_recursive(
+CREATE or replace FUNCTION geohash_coverContour_geoms(
   input_geom geometry,
   ghs_len int default 3,
-  cut boolean DEFAULT false,
   prefix0 text DEFAULT ''
-) RETURNS TABLE(ghs text, geom geometry) AS $f$
+) RETURNS TABLE(ghs text, geom geometry, cut_geom geometry) AS $f$
 
- WITH RECURSIVE rcover(ghs, is_contained, geom) AS (
-   SELECT * FROM geohash_cover_geom(input_geom,prefix0,cut) t0
+ WITH RECURSIVE rcover(ghs, is_contained, geom, cut_geom) AS (
+   SELECT *
+   FROM geohash_cover_geoms(input_geom,prefix0,false) t0
   UNION ALL
-   SELECT c.* FROM rcover, LATERAL geohash_cover_geom(input_geom,rcover.ghs,cut) c
-   WHERE length(rcover.ghs)<ghs_len AND NOT(c.is_contained) AND NOT(rcover.is_contained)
+   SELECT c.*
+   FROM rcover,
+        LATERAL geohash_cover_geoms(input_geom, rcover.ghs, false) c
+   WHERE length(rcover.ghs)<ghs_len AND NOT(rcover.is_contained) -- redundant AND NOT(c.is_contained)
  )
- SELECT ghs, geom FROM rcover WHERE length(ghs)=ghs_len;
+ SELECT ghs,geom,cut_geom
+ FROM rcover WHERE length(ghs)=ghs_len;
 
-$f$ LANGUAGE SQL;
--- create table lix AS SELECT * FROM geohash_cover_noncontained_recursive( (SELECT geom FROM ingest.fdw_jurisdiction_geom where isolabel_ext='BR') );
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_coverContour_geoms
+  IS 'Geohash cover of the contour.'
+;
+-- CREATE TABLE br_coverContour3 AS SELECT * FROM geohash_coverContour_geoms( (SELECT geom FROM ingest.fdw_jurisdiction_geom where isolabel_ext='BR'), 3 );
+
+CREATE or replace FUNCTION geohash_coverContour_geoms_splitarea(
+  input_geom geometry,
+  ghs_len int default 3,
+  max_area_factor float default 0.8,
+  prefix0 text default ''
+) RETURNS TABLE(ghs text, geom geometry, cut_geom geometry, area_factor float) AS $f$
+  WITH rcover_area AS (
+    SELECT *, ST_Area(cut_geom)/ST_Area(geom) AS k
+    FROM geohash_coverContour_geoms($1,$2,prefix0) -- all recurrency steps here.
+  )
+   SELECT ghs, geom, cut_geom, k
+   FROM rcover_area
+   WHERE k < max_area_factor
+  UNION ALL  -- More one recurrency step for big area_factor cells:
+   SELECT g.ghs, g.geom, g.cut_geom, ST_Area(g.cut_geom)/ST_Area(g.geom)
+   FROM rcover_area r, LATERAL geohash_cover_geoms(input_geom, ghs, false) g
+   WHERE r.k >= max_area_factor
+$f$ LANGUAGE SQL IMMUTABLE;
 
 -------------
+
 CREATE or replace FUNCTION geohash_GeomsMosaic(ghs_array text[], geom_mask geometry DEFAULT null)
 RETURNS TABLE(ghs text, lghs int, geom geometry) AS $f$
   WITH ghsgeom AS (
