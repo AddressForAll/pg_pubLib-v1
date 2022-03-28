@@ -566,8 +566,8 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
             SELECT *
             FROM hcode_distribution_reduce_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum );
     ELSE
-        lst_pre       := format('%L::jsonB, %s,%s,%s,%s, %s', p_j::text, p_left_erode::text,  p_size_min::text,    p_size_max::text, p_threshold_sum::text);
-        lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s, %5$s $$,      p_left_erode::text, (p_size_min+1)::text, p_size_max::text, p_threshold_sum::text);
+        lst_pre       := format('%L::jsonB, %s, %s, %s, %s', p_j::text, p_left_erode::text,  p_size_min::text,    p_size_max::text, p_threshold_sum::text);
+        lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s $$,           p_left_erode::text, (p_size_min+1)::text, p_size_max::text, p_threshold_sum::text);
 
         RETURN QUERY EXECUTE format($$
             WITH t AS (
@@ -582,8 +582,8 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
             SELECT *
             FROM hcode_distribution_reduce_recursive_pre_raw_alt( (SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS FALSE), %2$s )
         $$,
-        lst_pre,      -- %$1 = p1 p_j p2 left_erode, p3 size_min, p4 threshold_sum, p5 p_size_max
-        lst_recursive -- %$2 =        p2 left_erode, p3 size_min, p4 threshold_sum, p5 p_size_max
+        lst_pre,      -- %$1 = p1 p_j p2 left_erode, p3 size_min, p4 p_size_max, p5 threshold_sum
+        lst_recursive -- %$2 =        p2 left_erode, p3 size_min, p4 p_size_max, p5 threshold_sum
         );
     END IF;
 END;
