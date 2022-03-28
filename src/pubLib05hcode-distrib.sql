@@ -608,7 +608,8 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt(
                     array_concat_agg(s.jj)
             FROM (
                 SELECT  CASE
-                            WHEN r.n_items < p_threshold_min
+                            WHEN     r.n_items       < p_threshold_min
+                                 AND length(r.hcode) > p_size_min
                             THEN substr(r.hcode,1,length(r.hcode)-1)
                             ELSE r.hcode
                         END AS hcode,
