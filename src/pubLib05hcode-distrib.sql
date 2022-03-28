@@ -471,7 +471,6 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
     p_j             jsonB,               -- 1. input pairs {$hcode:$n_items}
     p_left_erode    int    DEFAULT 1,    -- 2. number of charcters to drop from left to right
     p_size_min      int    DEFAULT 1,    -- 3. minimal size of hcode
-    p_size_max_agg  int    DEFAULT 7,    -- 5. max size of hcode
     p_size_max      int    DEFAULT 1,    -- 5. max size of hcode
     p_threshold_sum int    DEFAULT NULL  -- 6. byte size of bucket
 ) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j boolean, jj text[]) AS $f$
@@ -480,23 +479,20 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
         SELECT  hcode,
                 n::int n,
                 length(hcode)-(p_size_max-p_size_min) AS size,
-                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min    )) ORDER BY hcode) AS sum_hcodea,
-                --SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_max_agg)) ORDER BY hcode) AS sum_hcodeb
+                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ORDER BY hcode) AS sum_hcodea,
                 SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ORDER BY hcode) AS sum_hcodeb
         FROM  jsonb_each(p_j) t(hcode,n) 
         WHERE length(hcode)-(p_size_max-p_size_min) >= 0
     ),
     b AS (
         SELECT *,
-               MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min    )) ) AS max_hcodea,
-               --MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_max_agg)) ) AS max_hcodeb
+               MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ) AS max_hcodea,
                MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ) AS max_hcodeb
         FROM a
     ),
     c AS (
         SELECT hcode,
-               substr(hcode,1,length(hcode)-(p_size_max-p_size_min    )) hcodea,
-               --substr(hcode,1,length(hcode)-(p_size_max-p_size_max_agg)) hcodeb,
+               substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) hcodea,
                substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) hcodeb,
                max_hcodea,
                max_hcodeb
@@ -517,15 +513,14 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
                hcodeb,
                max_hcodea,
                max_hcodeb,
-               SUM(max_hcodeb) OVER (PARTITION BY hcodea ORDER BY hcodea, hcodeb ) AS sum_max_hcodeb
+               SUM(max_hcodeb) OVER (PARTITION BY hcodea ORDER BY max_hcodeb ) AS sum_max_hcodeb
         FROM d
     ),
     f AS (
         SELECT *
         FROM b
         LEFT JOIN e
-        ON      e.hcodea=substr(hcode,1,length(hcode)-(p_size_max-p_size_min    )) 
-            --AND e.hcodeb=substr(hcode,1,length(hcode)-(p_size_max-p_size_max_agg))
+        ON      e.hcodea=substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) 
             AND e.hcodeb=substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1))
     ),
     g AS (
@@ -558,7 +553,6 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
     p_j             jsonB,               -- 1. input pairs {$hcode:$n_items}
     p_left_erode    int    DEFAULT 1,    -- 2. number of charcters to drop from left to right
     p_size_min      int    DEFAULT 1,    -- 3. minimal size of hcode
-    p_size_max_agg  int    DEFAULT 7,    -- 5. max size of hcode
     p_size_max      int    DEFAULT 1,    -- 5. max size of hcode
     p_threshold_sum int    DEFAULT NULL  -- 6. byte size of bucket
 ) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j boolean, jj text[]) AS $f$
@@ -570,10 +564,10 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
     IF p_size_min = p_size_max THEN
         RETURN QUERY
             SELECT *
-            FROM hcode_distribution_reduce_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max_agg, p_size_max, p_threshold_sum );
+            FROM hcode_distribution_reduce_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum );
     ELSE
-        lst_pre       := format('%L::jsonB, %s,%s,%s,%s, %s', p_j::text, p_left_erode::text,  p_size_min::text,    p_size_max_agg::text, p_size_max::text, p_threshold_sum::text);
-        lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s, %5$s $$,      p_left_erode::text, (p_size_min+1)::text, p_size_max_agg::text, p_size_max::text, p_threshold_sum::text);
+        lst_pre       := format('%L::jsonB, %s,%s,%s,%s, %s', p_j::text, p_left_erode::text,  p_size_min::text,    p_size_max::text, p_threshold_sum::text);
+        lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s, %5$s $$,      p_left_erode::text, (p_size_min+1)::text, p_size_max::text, p_threshold_sum::text);
 
         RETURN QUERY EXECUTE format($$
             WITH t AS (
@@ -600,7 +594,6 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt(
     p_j             jsonB,               -- 1. input pairs {$hcode:$n_items}
     p_left_erode    int    DEFAULT 1,    -- 2. number of charcters to drop from left to right
     p_size_min      int    DEFAULT 1,    -- 3. minimal size of hcode
-    p_size_max_agg  int    DEFAULT 7,    -- 5. max size of hcode
     p_size_max      int    DEFAULT 1,    -- 5. max size of hcode
     p_threshold_sum int    DEFAULT NULL, -- 6. byte size of bucket
     p_threshold_min int    DEFAULT 1000  -- 7. minimum value. default value refers to points
@@ -624,7 +617,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt(
                         r.n_keys,
                         r.j,
                         r.jj
-                FROM hcode_distribution_reduce_recursive_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max_agg, p_size_max, p_threshold_sum ) r
+                FROM hcode_distribution_reduce_recursive_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum ) r
             ) s
             GROUP BY 1;
 END;
