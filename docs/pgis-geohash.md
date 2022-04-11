@@ -1,42 +1,54 @@
 
 ## Step-by-step
 
-Alguns exemplos usando passo-a-passo mais grosseiro e artesanal, usando apenas a função [geohash_cover(geom,prefix)](https://github.com/AddressForAll/pg_pubLib-v1/blob/main/src/pubLib05pgis-geohash.sql#L22).
+Some examples using the function [`geohash_cover_list(geom,prefix,onlycontained)`](https://github.com/AddressForAll/pg_pubLib-v1/blob/main/src/pubLib05pgis-geohash.sql#L22) and its variations, showing its algorithm behaviour in a handicraft step-by-step.
 
-### Brasil, recorrencia para cobertura da fronteira
-Exemplo de resultados do uso de Geohash_cover com os limites de país do Brasil:
+IMPORTANT: the `onlycontained` parameter,
+* when `true`,
+determines that  "only contained cells" (**interior cells**) will be returned;
+*  wnen `false` (default) only contour cells (**border**);
+* `NULL` determines that both (**interior+border**) will be returned.
+
+### Brazil, recurrence for border coverage
+
+Example results of using *Cover_list* with Brazil country boundaries:
 
 ```sql
-CREATE VIEW br_geom AS SELECT geom FROM ingest.fdw_jurisdiction_geom where isolabel_ext='BR';
+CREATE VIEW br_geom AS
+  SELECT geom  -- BRazil polygon
+  FROM ingest.fdw_jurisdiction_geom
+  WHERE isolabel_ext='BR';
 
-SELECT geohash_cover_list(geom) FROM br_geom;
+SELECT geohash_cover_list(geom) FROM br_geom; -- using default, onlycontained=false (border)
   --  {6,7,d,e}
 SELECT geohash_cover_list(geom,'6') FROM br_geom;
   -- {6d,6f,6g,6q,6r,6s,6t,6u,6v,6w,6x,6y,6z} ; cardinality=13
 SELECT cardinality(geohash_cover_list(geom,'6qm')) FROM br_geom;
-  -- 32  (a célula '6qm' está totalmente contida no Brasil)
+  -- 32  (the cell '6qm' is contained into Brazil)
 ```
-Não precisamos conferir a cardinalidade para saber que uma célula está totalmente contida: uma pequena modificação na função, e usando objetos json ao invés de arrays, nos permite controlar o critério.
+We don't need to check cardinality to know that a cell is fully contained: a small modification in the function, and using JSON objects instead of arrays, allows us to control the criterion. *Cover_testlist* do the work:
 
 ```sql
-select geohash_cover_testlist(geom) FROM  br_geom;
-  -- {"6": false, "7": false, "d": false, "e": false}
-select geohash_cover_testlist(geom,'6') FROM br_geom;
-  --  {"6d": false, "6f": false, "6g": false, "6q": false, "6r": false, "6s": false, "6t": false, "6u": false,
-  --   "6v": true, "6w": false, "6x": true, "6y": true, "6z": false}
-select geohash_cover_testlist(geom,'6g') FROM br_geom;
+SELECT geohash_cover_testlist(geom) FROM br_geom;
+  -- Result: {"6": false, "7": false, "d": false, "e": false}.  A recurrence over "6":
+SELECT geohash_cover_testlist(geom,'6') FROM br_geom;
+  -- Result: {"6d": false, "6f": false, "6g": false, "6q": false, "6r": false, "6s": false, "6t": false, "6u": false,
+  --   "6v": true, "6w": false, "6x": true, "6y": true, "6z": false}. A recurrence over "6g":
+SELECT geohash_cover_testlist(geom,'6g') FROM br_geom;
   -- {"6g0": false, "6g1": false, "6g3": false, "6g4": true, "6g5": true, "6g6": true, "6g7": true, "6g8": false, ...}
 ```
 
-Podemos estabelecer um número máximo de dígitos, mantendo apenas os geohashes indicados como *false* (não totalmente contidos no Brasil), e obter todos eles por recorrência. A ilustração abaixo mostra o resultado no QGIS sobrepondo as geometrias recortadas (cut) às geometrias de célula puras (boxes).
+The staep by step shwos that we can set a maximum number of digits, keeping only the Geohashes indicated as *false* (not fully contained in Brazil), and get all of them by recurrence.
+
+Now, to view at [QGIS](https://en.wikipedia.org/wiki/QGIS) or other iterface, we need geometries, so use *CoverContour_geoms*.  The illustration below shows the result in QGIS overlaying the cut geometries with the pure cell geometries (boxes). Three tables was prepared for QGIS output:
 
 ```sql
 CREATE TABLE qgis_output1 AS
-  SELECT g.*
-  FROM br_geom b, LATERAL geohash_coverContour_geoms(b.geom,3) g
+  SELECT *  -- Brazil as subquery
+  FROM  geohash_coverContour_geoms(  (SELECT geom FROM br_geom),  3   ) g
 ; -- 147 rows
 CREATE TABLE qgis_output2 AS
-  SELECT g.*
+  SELECT g.*      -- an useful SQL alternative for subquery:
   FROM br_geom b, LATERAL geohash_coverContour_geoms_splitarea(b.geom, 3, 0.5 ) g
 ; -- 575 rows
 CREATE TABLE qgis_output3 AS
@@ -44,38 +56,37 @@ CREATE TABLE qgis_output3 AS
   FROM br_geom b, LATERAL geohash_coverContour_geoms_splitarea(b.geom, 2, 0.5 ) g
 ; -- 56 rows
 ```
+<img align="right" src="assets/br_geohash3_contour2.png">
 
-QGIS_output1. Regular 3-digits Geohash cells "cover contour", with no recursion, using `geohash_coverContour_geoms` function:
-
-![](assets/br_geohash3_contour2.png)
+*QGIS_output1* (side illustration). Regular 3-digits Geohash cells "cover contour" (or "cover outline"), with no recursion, using `geohash_coverContour_geoms` function. In purple the `geom_cut`  and `geom`  as its cell, in green at backgroun.
 <!-- ![](assets/br_geohash3_contour.png)
-
 ![](assets/br_contourBug-50perc-onlyCut.png)
 ![](assets/br_contourBug-50perc.png)
 ![](assets/br_contour-80perc.png)
 ![](assets/br_contour-50perc-2digits.png)
-
  -->
-QGIS_output2. Bellow examples using `geohash_coverContour_geoms_splitarea()` function.
-In yellow the `geom_cut`  and `geom`  as its cell, in green.  Original parent-cells in light green background, from QGIS_output1.
+
+ Bellow the examples using *CoverContour_geoms_splitarea* function. It do only a two-step  recurrence: first calling *CoverContour_geoms*, then, when  *area_factor* of a cell is less than a threshold, calling *Cover_geoms* for that cell.
+
+*QGIS_output2*. In yellow the `geom_cut`,  and `geom`  as its cell in darkened green background.  Original parent cells of  `geom_cut` are in light-green background  &mdash; obtained as `geom`  from *QGIS_output1*, enhancing "interior side" of the yellow contour.
 
 ![](assets/br_contour-50perc.png)
 
-Same, but only `geom_cut`:
+The yellow "pixelized contour" (from `geom_cut`) has 3-digit Geoash cells on regular boundary lines, and 4-digit on more complex and irregular boundary lines. Below it was isolated to enhance it. <br/>PS: see also holes in the contour, at [bugged 50%](assets/br_contourBug-50perc-onlyCut.png), produced when interior cells are not used in the recurrence.
+
 ![](assets/br_contourOnly-50perc.png)
 
-QGIS_output3. Two-digit Geohash as main grid, and 3-digit as secondary, when primary has more than 50% of its area contained into the country. See also [assets/br_contour-50perc](assets/br_contour-50perc-2digits.png), bellow the contour-only, `geom_cut`.
+*QGIS_output3* was illustrated in the right side of the comparison below. The two-digit Geohash as main grid, and 3-digit as secondary, when primary has more than 50% of its area contained into the country. See also [assets/br_contour-50perc](assets/br_contour-50perc-2digits.png) and it's [contourOnly of `geom_cut`](assets/br_contourOnly-50perc-2digits.png).
+
+Comparing 1-digit and more-digits covers: ideal is the minimal of 50% of covered area in each cell.  See a counter-example of [80% contour](assets/br_contour-80perc.png).
+
+![](assets/br_contour-CmpCovers.png)
 
 Typical application is to detect the jurisdiction of a Geohash-point by its prefix. The strategy is to minimize both, the number of (big) cover-cells of the country, and the area of the contour-cover cells. The supposed result is to optimize the performancem, by reducing the number and area of multi-country cells.
-<br/>PS: real-life jurisdiction detection use the buffer of Territorial waters instead terrestral borders.
-
-![](assets/br_contourOnly-50perc-2digits.png)
-
-Comparing 1-digit and more-digits covers: ideal is the minimal of 50% of covered area in each cell.  
-![](assets/br_countour-CmpCovers.png)
+<br/>PS: real-life jurisdiction detection use the buffer of Territorial waters instead terrestral borders. We can use a [bloom filter](https://www.postgresql.org/docs/14/bloom.html) for 2 or 3-digit prefix of a list of a jurisdiction table country-contained cells.
 
 
-All `geohash_coverContour*()` function are using this Recursive CTE (common table expression) as kernel algorithm:
+All `geohash_coverContour*()` function can use a Recursive CTE (common table expression) as kernel algorithm:
 
 ```SQL
 WITH RECURSIVE rcover(ghs, is_contained, geom) AS (  -- geohash_cover_noncontained_recursive()
@@ -89,7 +100,8 @@ WITH RECURSIVE rcover(ghs, is_contained, geom) AS (  -- geohash_cover_noncontain
 )
 SELECT ghs, geom FROM rcover WHERE length(ghs)=ghs_len;
 ```
-Para entender a recorrência basta revisitar [um exemplo didático](https://towardsdatascience.com/recursive-sql-queries-with-postgresql-87e2a453f1b):
+
+To understand Recursive CTE, just revisit [a didactic example](https://towardsdatascience.com/recursive-sql-queries-with-postgresql-87e2a453f1b):
 
 ```SQL
 WITH RECURSIVE rec_nums (n,k) -- remember a CREATE TABLE statement, not a function
@@ -114,9 +126,30 @@ select geohash_cover_testlist(geom,'75cm') from  ingest.fdw_jurisdiction_geom wh
 -- true:75cms; false:{75cm5,75cm6,75cm7,75cmd,75cme,75cmf,75cmg,75cmh,75cmk,75cmm,75cmt,75cmu,75cmv,75cmw}
 ```
 
-### Encapsulando distribuições
+### Encapsulating distributions
 
-See [hcode-distrib](hcode-distrib.md) as application: ....
+See [hcode-distrib](hcode-distrib.md) as application:
+
+1. showing the **equivalency** between `geohash_cover_list()` and aggregated list of distinct Geohash prefixes.
+2. using optimized lists
+
+```SQL
+CREATE VIEW ec_testPoints_geom AS -- file "numeracion_casas_t_direcc.shp" of EC-F-Azogues, a geoaddress_full example.
+  SELECT ST_Collect(geom) AS geom FROM ingest.feature_asis WHERE file_id=54
+;
+CREATE VIEW ec_azores_geom AS
+  SELECT geom FROM ingest.fdw_jurisdiction_geom where isolabel_ext='EC-F-Azogues'
+;
+SELECT geohash_cover_list(geom) FROM ec_testPoints_geom
+; -- {6pxbm}
+SELECT geohash_cover_list(geom,'6pxbm') FROM ec_testPoints_geom
+; -- {6pxbmg,6pxbms,6pxbmt,6pxbmu,6pxbmv,6pxbmw,6pxbmy}
+SELECT array_agg( DISTINCT substr(kx_ghs9,1,6) ) AS list6 FROM ingest.feature_asis WHERE file_id=54;
+  -- {6pxbmg,6pxbms,6pxbmt,6pxbmu,6pxbmv,6pxbmw,6pxbmy}
+
+SELECT geohash_cover_list(geom) FROM ec_azores_geom;     -- {6}
+SELECT geohash_cover_list(geom,'6') FROM ec_azores_geom; -- {6p,6r}
+```
 
 ### Mosaicos de distribuição balanceada
 
