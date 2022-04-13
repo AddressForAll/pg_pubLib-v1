@@ -479,14 +479,14 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
         SELECT  hcode,
                 n::int n,
                 length(hcode)-(p_size_max-p_size_min) AS size,
-                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ORDER BY hcode) AS sum_hcodea,
+                --SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ORDER BY hcode) AS sum_hcodea,
                 SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ORDER BY hcode) AS sum_hcodeb
         FROM  jsonb_each(p_j) t(hcode,n) 
         WHERE length(hcode)-(p_size_max-p_size_min) >= 0
     ),
     b AS (
         SELECT *,
-               MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ) AS max_hcodea,
+               --MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ) AS max_hcodea,
                MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ) AS max_hcodeb
         FROM a
     ),
@@ -494,14 +494,14 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
         SELECT hcode,
                substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) hcodea,
                substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) hcodeb,
-               max_hcodea,
+               --max_hcodea,
                max_hcodeb
         FROM b
     ),
     d AS (
         SELECT hcodea,
                hcodeb,
-               MAX(max_hcodea)  AS max_hcodea,
+               --MAX(max_hcodea)  AS max_hcodea,
                MAX(max_hcodeb)  AS max_hcodeb,
                array_agg(hcode) AS hcode_agg
             FROM c
@@ -511,7 +511,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
     e AS (
         SELECT hcodea,
                hcodeb,
-               max_hcodea,
+               --max_hcodea,
                max_hcodeb,
                SUM(max_hcodeb) OVER (PARTITION BY hcodea ORDER BY max_hcodeb ) AS sum_max_hcodeb
         FROM d
@@ -556,22 +556,15 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
     p_size_max      int    DEFAULT 1,    -- 5. max size of hcode
     p_threshold_sum int    DEFAULT NULL  -- 6. byte size of bucket
 ) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j boolean, jj text[]) AS $f$
-    DECLARE
-        lst_recursive text;
-        lst_pre       text;
     BEGIN
-
     IF p_size_min = p_size_max THEN
         RETURN QUERY
             SELECT *
             FROM hcode_distribution_reduce_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum );
     ELSE
-        lst_pre       := format('%L::jsonB, %s, %s, %s, %s', p_j::text, p_left_erode::text,  p_size_min::text,    p_size_max::text, p_threshold_sum::text);
-        lst_recursive := format($$ %1$s, %2$s, %3$s, %4$s $$,           p_left_erode::text, (p_size_min+1)::text, p_size_max::text, p_threshold_sum::text);
-
-        RETURN QUERY EXECUTE format($$
+        RETURN QUERY
             WITH t AS (
-                SELECT * FROM hcode_distribution_reduce_pre_raw_alt(%1$s)
+                SELECT * FROM hcode_distribution_reduce_pre_raw_alt(p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum)
             )
             SELECT  *
             FROM t
@@ -580,13 +573,10 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_pre_raw_alt(
             UNION ALL
 
             SELECT *
-            FROM hcode_distribution_reduce_recursive_pre_raw_alt( (SELECT jsonb_object_agg(hcode,n_items) FROM t WHERE t.j IS FALSE), %2$s )
-        $$,
-        lst_pre,      -- %$1 = p1 p_j p2 left_erode, p3 size_min, p4 p_size_max, p5 threshold_sum
-        lst_recursive -- %$2 =        p2 left_erode, p3 size_min, p4 p_size_max, p5 threshold_sum
-        );
+            FROM hcode_distribution_reduce_recursive_pre_raw_alt( (SELECT jsonb_object_agg(t.hcode,t.n_items) FROM t WHERE t.j IS FALSE), p_left_erode, p_size_min+1, p_size_max, p_threshold_sum )
+            ;
     END IF;
-END;
+    END;
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
 
 
@@ -598,28 +588,25 @@ CREATE or replace FUNCTION hcode_distribution_reduce_recursive_raw_alt(
     p_threshold_sum int    DEFAULT NULL, -- 6. byte size of bucket
     p_threshold_min int    DEFAULT 1000  -- 7. minimum value. default value refers to points
 ) RETURNS TABLE (hcode text, n_items bigint, mdn_items bigint, n_keys bigint, j boolean, jj text[]) AS $f$
-    BEGIN
-        RETURN QUERY
-            SELECT  s.hcode,
-                    SUM(s.n_items) AS n_items,
-                    MAX(s.mdn_items::bigint) AS mdn_items,
-                    SUM(s.n_keys) AS n_keys,
-                    TRUE,
-                    array_concat_agg(s.jj)
-            FROM (
-                SELECT  CASE
-                            WHEN     r.n_items       < p_threshold_min
-                                 AND length(r.hcode) > p_size_min
-                            THEN substr(r.hcode,1,length(r.hcode)-1)
-                            ELSE r.hcode
-                        END AS hcode,
-                        r.n_items,
-                        r.mdn_items,
-                        r.n_keys,
-                        r.j,
-                        r.jj
-                FROM hcode_distribution_reduce_recursive_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum ) r
-            ) s
-            GROUP BY 1;
-END;
-$f$ LANGUAGE PLpgSQL IMMUTABLE;
+    SELECT  s.hcode,
+            SUM(s.n_items) AS n_items,
+            MAX(s.mdn_items::bigint) AS mdn_items,
+            SUM(s.n_keys) AS n_keys,
+            TRUE,
+            array_concat_agg(s.jj)
+    FROM (
+        SELECT  CASE
+                    WHEN r.n_items           < p_threshold_min
+                         AND length(r.hcode) > p_size_min
+                    THEN substr(r.hcode,1,length(r.hcode)-1)
+                    ELSE r.hcode
+                END AS hcode,
+                r.n_items,
+                r.mdn_items,
+                r.n_keys,
+                r.j,
+                r.jj
+        FROM hcode_distribution_reduce_recursive_pre_raw_alt( p_j, p_left_erode, p_size_min, p_size_max, p_threshold_sum ) r
+    ) s
+    GROUP BY 1;
+$f$ LANGUAGE SQL IMMUTABLE;
