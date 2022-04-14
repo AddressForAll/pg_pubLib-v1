@@ -475,56 +475,37 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
     p_threshold_sum int    DEFAULT NULL  -- 6. byte size of bucket
 ) RETURNS TABLE (hcode text, n_items int, mdn_items int, n_keys int, j boolean, jj text[]) AS $f$
     WITH
-    a AS (
-        SELECT  hcode,
-                n::int n,
-                length(hcode)-(p_size_max-p_size_min) AS size,
-                --SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ORDER BY hcode) AS sum_hcodea,
-                SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ORDER BY hcode) AS sum_hcodeb
-        FROM  jsonb_each(p_j) t(hcode,n) 
-        WHERE length(hcode)-(p_size_max-p_size_min) >= 0
-    ),
     b AS (
         SELECT *,
-               --MAX(sum_hcodea) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) ) AS max_hcodea,
                MAX(sum_hcodeb) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ) AS max_hcodeb
-        FROM a
-    ),
-    c AS (
-        SELECT hcode,
-               substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) hcodea,
-               substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) hcodeb,
-               --max_hcodea,
-               max_hcodeb
-        FROM b
-    ),
-    d AS (
-        SELECT hcodea,
-               hcodeb,
-               --MAX(max_hcodea)  AS max_hcodea,
-               MAX(max_hcodeb)  AS max_hcodeb,
-               array_agg(hcode) AS hcode_agg
-            FROM c
-            GROUP BY 1,2
-            ORDER BY max_hcodeb
+        FROM (
+                SELECT  hcode,
+                        n::int n,
+                        length(hcode)-(p_size_max-p_size_min) AS size,
+                        SUM(n::int) OVER (PARTITION BY substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) ORDER BY hcode) AS sum_hcodeb
+                FROM  jsonb_each(p_j) t(hcode,n) 
+                WHERE length(hcode)-(p_size_max-p_size_min) >= 0
+            ) a
     ),
     e AS (
-        SELECT hcodea, hcodeb, MAX(max_hcodeb) AS max_hcodeb, MAX(sum_max_hcodeb) AS sum_max_hcodeb
+        SELECT hcodea,
+               hcodeb,
+               max_hcodeb,
+               SUM(max_hcodeb) OVER (PARTITION BY hcodea ORDER BY max_hcodeb ) AS sum_max_hcodeb
         FROM (
-            SELECT hcodea,
-                hcodeb,
-                --max_hcodea,
-                max_hcodeb,
-                SUM(max_hcodeb) OVER ( PARTITION BY hcodea ORDER BY max_hcodeb ) AS sum_max_hcodeb
-            FROM d ) dd
-        GROUP BY 1, 2
-    ),
-    f AS (
-        SELECT *
-        FROM b
-        LEFT JOIN e
-        ON      e.hcodea=substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) 
-            AND e.hcodeb=substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1))
+                SELECT hcodea,
+                    hcodeb,
+                    MAX(max_hcodeb)  AS max_hcodeb
+                FROM (
+                        SELECT hcode,
+                            substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) hcodea,
+                            substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1)) hcodeb,
+                            max_hcodeb
+                        FROM b
+                    ) c
+                GROUP BY 1,2
+                ORDER BY max_hcodeb
+            ) d
     ),
     g AS (
         SELECT  CASE
@@ -536,7 +517,13 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
                 percentile_disc(0.5) WITHIN GROUP (ORDER BY n) AS mdn_items,
                 COUNT(*)::int AS n_keys,
                 array_agg(hcode) as hcode_agg
-        FROM f
+        FROM (
+                SELECT *
+                FROM b
+                LEFT JOIN e
+                ON      e.hcodea=substr(hcode,1,length(hcode)-(p_size_max-p_size_min  )) 
+                    AND e.hcodeb=substr(hcode,1,length(hcode)-(p_size_max-p_size_min-1))
+            ) f
         GROUP BY 1
     )
     SELECT hcode,
