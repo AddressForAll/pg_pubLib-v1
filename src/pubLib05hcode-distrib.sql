@@ -509,12 +509,15 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
             ORDER BY max_hcodeb
     ),
     e AS (
-        SELECT hcodea,
-               hcodeb,
-               --max_hcodea,
-               max_hcodeb,
-               SUM(max_hcodeb) OVER (PARTITION BY hcodea ORDER BY max_hcodeb ) AS sum_max_hcodeb
-        FROM d
+        SELECT hcodea, hcodeb, MAX(max_hcodeb) AS max_hcodeb, MAX(sum_max_hcodeb) AS sum_max_hcodeb
+        FROM (
+            SELECT hcodea,
+                hcodeb,
+                --max_hcodea,
+                max_hcodeb,
+                SUM(max_hcodeb) OVER ( PARTITION BY hcodea ORDER BY max_hcodeb ) AS sum_max_hcodeb
+            FROM d ) dd
+        GROUP BY 1, 2
     ),
     f AS (
         SELECT *
