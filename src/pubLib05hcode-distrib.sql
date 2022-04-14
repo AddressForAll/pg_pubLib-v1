@@ -541,7 +541,7 @@ CREATE or replace FUNCTION hcode_distribution_reduce_pre_raw_alt(
             mdn_items,
             n_keys,
             CASE
-                WHEN length(hcode) = $3 THEN TRUE
+                WHEN length(hcode) = p_size_min THEN TRUE
                 ELSE FALSE
             END AS j,
             hcode_agg
