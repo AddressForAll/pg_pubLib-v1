@@ -69,7 +69,7 @@ CREATE or replace FUNCTION jsonb_pg_stat_file(
   -- usar (j->'size')::bigint+1 como pg_read(size)!  para poder usar missing nele.
   SELECT j
          || jsonb_build_object( 'file',f )
-         || CASE WHEN add_md5 THEN jsonb_build_object( 'hash_md5', md5(pg_read_binary_file(f)) ) ELSE '{}'::jsonb END
+         || CASE WHEN add_md5 THEN jsonb_build_object( 'hash_md5', md5(pg_read_binary_file(f,0,900000000)) ) ELSE '{}'::jsonb END
   FROM to_jsonb( pg_stat_file(f,missing_ok) ) t(j)
   WHERE j IS NOT NULL
 $f$ LANGUAGE SQL IMMUTABLE;
