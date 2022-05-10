@@ -23,7 +23,7 @@ CREATE or replace FUNCTION geojson_readfile_features_jgeom(file text, file_id in
    SELECT file_id, (ROW_NUMBER() OVER())::int AS subfeature_id,
           subfeature->>'type' AS subfeature_type,
           subfeature->'properties' AS properties,
-          crs || subfeature->'geometry' AS jgeom
+          crs || (subfeature->'geometry') AS jgeom
    FROM (
       SELECT j->>'type' AS geojson_type,
              jsonb_objslice('crs',j) AS crs,
