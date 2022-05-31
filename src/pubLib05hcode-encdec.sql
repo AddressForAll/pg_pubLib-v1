@@ -422,6 +422,6 @@ FROM (
   ), p_srid) AS geom
 ) t
 $f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION str_ggeohash_draw_cell_bybox(float,boolean,int)
+COMMENT ON FUNCTION str_ggeohash_draw_cell_bybox(float[],boolean,int)
   IS 'Draws a square-cell from BBOX.'
 ;
