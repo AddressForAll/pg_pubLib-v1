@@ -331,7 +331,18 @@ COMMENT ON FUNCTION str_geohash_encode(float,float,int)
 -- Wrap and helper functions:
 
 CREATE or replace FUNCTION str_geouri_decode(uri text) RETURNS float[] as $f$
-  SELECT regexp_split_to_array(regexp_replace(uri,'^geo:','','i'),',')::float[]
+  SELECT
+    CASE
+      WHEN cardinality(a)=2 AND u IS     NULL THEN a || array[null,null]::float[]
+      WHEN cardinality(a)=3 AND u IS     NULL THEN a || array[null]::float[]
+      WHEN cardinality(a)=2 AND u IS NOT NULL THEN a || array[null,u]::float[]
+      WHEN cardinality(a)=3 AND u IS NOT NULL THEN a || array[u]::float[]
+      ELSE NULL
+    END
+  FROM (
+    SELECT regexp_split_to_array(regexp_replace(uri,'^geo:|;.+$','','ig'),',')::float[]  AS a,
+           (regexp_match(uri,';u=([0-9\.]+)'))[1]  AS u
+  ) t
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geouri_decode(text)
   IS 'Decodes standard GeoURI of latitude and longitude into float array.'
