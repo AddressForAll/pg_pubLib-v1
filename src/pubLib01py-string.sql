@@ -63,4 +63,42 @@ CREATE or replace FUNCTION yamlfile_to_jsonb(file text) RETURNS JSONb AS $wrap$
   SELECT yaml_to_jsonb( pg_read_file(file) )
 $wrap$ LANGUAGE SQL IMMUTABLE;
 
+-----
+
+CREATE or replace FUNCTION hcodes_common_prefix(
+    -- pending to convert to SQL or PLpgSQL.
+  a    text[]    -- the input codes with some common prefix
+) RETURNS text AS $f$
+    # See https://www.geeksforgeeks.org/longest-common-prefix-using-sorting/
+    size = len(a)
+  
+    # if size is 0, return empty string 
+    if (size == 0):
+        return ""
+  
+    if (size == 1):
+        return a[0]
+  
+    # sort the array of strings 
+    a.sort()
+      
+    # find the minimum length from 
+    # first and last string 
+    end = min(len(a[0]), len(a[size - 1]))
+  
+    # find the common prefix between 
+    # the first and last string 
+    i = 0
+    while (i < end and 
+           a[0][i] == a[size - 1][i]):
+        i += 1
+  
+    pre = a[0][0: i]
+    return pre
+  
+$f$ language PLpython3u IMMUTABLE;
+COMMENT ON FUNCTION hcodes_common_prefix(text[])
+  IS 'Longest Common Prefix of a set of hcodes, sorting array'
+;
+-- SELECT hcodes_common_prefix( array['geeksforgeeks', 'geeks', 'geek', 'geezer'] );
 
