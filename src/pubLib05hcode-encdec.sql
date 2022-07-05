@@ -219,6 +219,55 @@ CREATE or replace FUNCTION str_ggeohash_encode2(
    SELECT str_ggeohash_encode2($1, $2, $3, $4, $5, bbox[1], bbox[2], bbox[3], bbox[4])
 $f$ LANGUAGE SQL IMMUTABLE;
 
+CREATE or replace FUNCTION str_ggeohash_encode3(
+   x float,
+   y float,
+   min_x float default -90.,
+   min_y float default -180.,
+   max_x float default 90.,
+   max_y float default 180.,
+   bit_length int default 40
+) RETURNS varbit as $f$
+DECLARE
+ hash_value varbit := b'0';
+ i int := 0;
+ mid float;
+BEGIN
+ WHILE i < bit_length  LOOP
+   IF i % 2 = 0 THEN
+     mid := (max_y + min_y) / 2.0;
+     IF y > mid THEN
+       hash_value := hash_value || B'1';
+       min_y := mid;
+     ELSE
+       hash_value := hash_value || B'0';
+       max_y := mid;
+     END IF;
+   ELSE
+     mid := (max_x + min_x) / 2.0;
+     IF x > mid THEN
+       hash_value := hash_value || B'1';
+       min_x := mid;
+     ELSE
+       hash_value := hash_value || B'0';
+       max_x := mid;
+     END IF;
+   END IF;
+   i := i + 1;
+ END LOOP;
+ RETURN   substring(hash_value,2);
+END
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+-- SELECT str_ggeohash_encode3(4642144.0,1759788.0,4442144,1559788,4704288,1821932,10);
+
+CREATE or replace FUNCTION str_ggeohash_encode3(
+   x float,
+   y float,
+   bbox float[],
+   bit_length
+) RETURNS jsonb as $f$
+   SELECT str_ggeohash_encode2(x,y,bbox[1],bbox[2],bbox[3],bbox[4],bit_length)
+$f$ LANGUAGE SQL IMMUTABLE;
 ----
 
 CREATE or replace FUNCTION str_ggeohash_encode(
