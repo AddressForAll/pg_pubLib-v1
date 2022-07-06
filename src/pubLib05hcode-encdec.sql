@@ -19,7 +19,7 @@ CREATE extension IF NOT EXISTS postgis;
 ------ Criar publib04 vbit!  falta baseh_to_vbit
 
 /**
- * Converts bit string to text, using base2h, base4h, base8h or base16h.
+ * Converts bit string to text, using base2h, base4h, base8h, base16h or base32.
  * Uses letters "G" and "H" to sym44bolize non strandard bit strings (0 for44 bases44)
  * Uses extended alphabet (with no letter I,O,U W or X) for base8h and base16h.
  * @see http://osm.codes/_foundations/art1.pdf
@@ -27,7 +27,7 @@ CREATE extension IF NOT EXISTS postgis;
  */
 CREATE FUNCTION vbit_to_baseh(
   p_val varbit,  -- input
-  p_base int DEFAULT 4, -- selecting base2h, base4h, base8h, or base16h.
+  p_base int DEFAULT 4, -- selecting base2h, base4h, base8h, base16h or base32
   p_size int DEFAULT 0
 ) RETURNS text AS $f$
 DECLARE
@@ -37,17 +37,18 @@ DECLARE
     blk varbit;
     blk_n int;
     bits_per_digit int;
-    tr int[] := '{ {1,2,0,0}, {1,3,4,0}, {1,3,5,6} }'::int[]; -- --4h(bits,pos), 8h(bits,pos)
+    tr int[] := '{ {1,2,0,0,0}, {1,3,4,0,0}, {1,3,5,6,0}, {0,0,0,0,7} }'::int[]; --4h(bits,pos), 8h(bits,pos)
     tr_selected JSONb;
-    trtypes JSONb := '{"2":[1,1], "4":[1,2], "8":[2,3], "16":[3,4]}'::JSONb; -- TrPos,bits
+    trtypes JSONb := '{"2":[1,1], "4":[1,2], "8":[2,3], "16":[3,4], "32":[4,5]}'::JSONb; -- TrPos,bits
     trpos int;
     baseh "char"[] := array[
-      '[0:15]={G,H,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --1. 4h,8h,16h 1bit
-      '[0:15]={0,1,2,3,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --2. 4h 2bit
-      '[0:15]={J,K,L,M,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --3. 8h,16h 2bit
-      '[0:15]={0,1,2,3,4,5,6,7,x,x,x,x,x,x,x,x}'::"char"[], --4. 8h 3bit
-      '[0:15]={N,P,Q,R,S,T,V,Z,x,x,x,x,x,x,x,x}'::"char"[], --5. 16h 3bit
-      '[0:15]={0,1,2,3,4,5,6,7,8,9,a,b,c,d,e,f}'::"char"[]  --6. 16h 4bit
+      '[0:31]={G,H,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --1. 4h,8h,16h 1bit
+      '[0:31]={0,1,2,3,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --2. 4h        2bit
+      '[0:31]={J,K,L,M,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --3. 8h,16h    2bit
+      '[0:31]={0,1,2,3,4,5,6,7,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --4. 8h        3bit
+      '[0:31]={N,P,Q,R,S,T,V,Z,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --5. 16h       3bit
+      '[0:31]={0,1,2,3,4,5,6,7,8,9,a,b,c,d,e,f,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --6. 16h       4bit
+      '[0:31]={0,1,2,3,4,5,6,7,8,9,B,C,D,F,G,H,J,K,L,M,N,P,Q,R,S,T,U,V,W,X,Y,Z}'::"char"[]  --7. 32        5bit
     ]; -- jumpping I,O and U,W,X letters!
        -- the standard alphabet is https://tools.ietf.org/html/rfc4648#section-6
 BEGIN
@@ -80,7 +81,7 @@ BEGIN
 END
 $f$ LANGUAGE plpgsql IMMUTABLE;
 COMMENT ON FUNCTION vbit_to_baseh(varbit,int,int)
- IS 'Encodes varbit (string of bits) into Base4h, Base8h or Base16h. See http://osm.codes/_foundations/art1.pdf'
+ IS 'Encodes varbit (string of bits) into Base4h, Base8h, Base16h or Base32. See http://osm.codes/_foundations/art1.pdf'
 ;
 
 -- -- -- -- -- --
@@ -229,7 +230,7 @@ CREATE or replace FUNCTION str_ggeohash_encode3(
    bit_length int default 40
 ) RETURNS varbit as $f$
 DECLARE
- hash_value varbit := b'0';
+ bit_string varbit := b'';
  i int := 0;
  mid float;
 BEGIN
@@ -237,25 +238,25 @@ BEGIN
    IF i % 2 = 0 THEN
      mid := (max_y + min_y) / 2.0;
      IF y > mid THEN
-       hash_value := hash_value || B'1';
+       bit_string := bit_string || B'1';
        min_y := mid;
      ELSE
-       hash_value := hash_value || B'0';
+       bit_string := bit_string || B'0';
        max_y := mid;
      END IF;
    ELSE
      mid := (max_x + min_x) / 2.0;
      IF x > mid THEN
-       hash_value := hash_value || B'1';
+       bit_string := bit_string || B'1';
        min_x := mid;
      ELSE
-       hash_value := hash_value || B'0';
+       bit_string := bit_string || B'0';
        max_x := mid;
      END IF;
    END IF;
    i := i + 1;
  END LOOP;
- RETURN   substring(hash_value,2);
+ RETURN bit_string;
 END
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
 -- SELECT str_ggeohash_encode3(4642144.0,1759788.0,4442144,1559788,4704288,1821932,10);
@@ -264,9 +265,9 @@ CREATE or replace FUNCTION str_ggeohash_encode3(
    x float,
    y float,
    bbox float[],
-   bit_length
-) RETURNS jsonb as $f$
-   SELECT str_ggeohash_encode2(x,y,bbox[1],bbox[2],bbox[3],bbox[4],bit_length)
+   bit_length int
+) RETURNS varbit as $f$
+   SELECT str_ggeohash_encode3(x,y,bbox[1],bbox[2],bbox[3],bbox[4],bit_length)
 $f$ LANGUAGE SQL IMMUTABLE;
 ----
 
