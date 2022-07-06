@@ -309,9 +309,19 @@ BEGIN
    FOR i IN 1..length(code) LOOP
       digit = substr(code,i,1);
       hashValue := (code_digits_lookup->digit)::int;
-      FOR bits IN REVERSE (code_digit_bits-1)..0 LOOP
-	      bit = (hashValue >> bits) & 1; -- can be boolean
-	      IF isX THEN
+      FOR bits IN REVERSE
+      (
+        (
+        CASE -- gambiarra para decode de base16h, ver str_ggeohash_decode_box2 com input varbit
+          WHEN code_digit_bits = 4 AND digit IN ('g','h')                         THEN 1
+          WHEN code_digit_bits = 4 AND digit IN ('j','k','l','m')                 THEN 2
+          WHEN code_digit_bits = 4 AND digit IN ('n','p','q','r','s','t','v','z') THEN 3
+          ELSE code_digit_bits
+          END
+        )-1
+      )..0 LOOP
+        bit = (hashValue >> bits) & 1; -- can be boolean
+        IF isX THEN
           mid = (max_y + min_y) / 2;
           IF bit = 1 THEN
             min_y := mid;
@@ -334,6 +344,54 @@ END
 $f$ LANGUAGE PLpgSQL IMMUTABLE;
 COMMENT ON FUNCTION str_ggeohash_decode_box(text, integer, jsonb, float, float, float, float)
   IS 'Decodes string of a Generalized Geohash into a bounding Box that matches it. Returns a four-element array: [minlat, minlon, maxlat, maxlon]. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
+;
+
+-- pode substituir str_ggeohash_decode_box
+CREATE or replace FUNCTION str_ggeohash_decode_box2(
+   code varbit,
+   min_x float default -90.,
+   min_y float default -180.,
+   max_x float default 90.,
+   max_y float default 180.
+) RETURNS float[] as $f$
+DECLARE
+  mid    float;
+  bit    int;
+  i int;
+BEGIN
+   FOR i IN 0..(bit_length(code)-1) LOOP
+      bit = get_bit(code,i);
+      IF i % 2 = 0 THEN
+        mid = (max_y + min_y) / 2;
+        IF bit = 1 THEN
+          min_y := mid;
+        ELSE
+          max_y := mid;
+        END IF;
+      ELSE
+        mid = (max_x + min_x) / 2;
+        IF bit =1 THEN
+          min_x = mid;
+        ELSE
+          max_x = mid;
+        END IF;
+      END IF;
+   END LOOP;
+   RETURN array[min_x, min_y, max_x, max_y];
+END
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_decode_box2(varbit, float, float, float, float)
+  IS 'Decodes string of a Generalized Geohash into a bounding Box that matches it. Returns a four-element array: [minlat, minlon, maxlat, maxlon]. Algorithm adapted from https://github.com/ppKrauss/node-geohash/blob/master/main.js'
+;
+
+CREATE or replace FUNCTION str_ggeohash_decode_box2(
+   code varbit,
+   bbox float[]
+) RETURNS float[] as $wrap$
+  SELECT str_ggeohash_decode_box2($1, bbox[1], bbox[2], bbox[3], bbox[4])
+$wrap$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION str_ggeohash_decode_box2(varbit, float[])
+  IS 'Wrap for str_ggeohash_decode_box(...,float,float,float,float).'
 ;
 
 ------------------------------
