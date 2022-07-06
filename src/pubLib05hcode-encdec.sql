@@ -234,7 +234,7 @@ DECLARE
  i int := 0;
  mid float;
 BEGIN
- WHILE i < bit_length  LOOP
+ FOR i in 0..(bit_length-1) LOOP
    IF i % 2 = 0 THEN
      mid := (max_y + min_y) / 2.0;
      IF y > mid THEN
@@ -254,7 +254,6 @@ BEGIN
        max_x := mid;
      END IF;
    END IF;
-   i := i + 1;
  END LOOP;
  RETURN bit_string;
 END
