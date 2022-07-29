@@ -18,6 +18,12 @@ CREATE extension IF NOT EXISTS postgis;
 ----------------
 ------ Criar publib04 vbit!  falta baseh_to_vbit
 
+
+CREATE or replace FUNCTION varbit_to_int( b varbit, blen int DEFAULT NULL)
+RETURNS int AS $f$
+  SELECT (  (b'0'::bit(32) || b) << COALESCE(blen,bit_length(b))   )::bit(32)::int
+$f$ LANGUAGE SQL IMMUTABLE;
+
 /**
  * Converts bit string to text, using base2h, base4h, base8h, base16h or base32.
  * Uses letters "G" and "H" to sym44bolize non strandard bit strings (0 for44 bases44)
@@ -83,6 +89,64 @@ $f$ LANGUAGE plpgsql IMMUTABLE;
 COMMENT ON FUNCTION vbit_to_baseh(varbit,int,int)
  IS 'Encodes varbit (string of bits) into Base4h, Base8h, Base16h or Base32. See http://osm.codes/_foundations/art1.pdf'
 ;
+
+CREATE or replace FUNCTION baseh_to_vbit(
+  p_val text,  -- input
+  p_base int DEFAULT 4 -- selecting base2h, base4h, base8h, base16h or base32.
+) RETURNS varbit AS $f$
+DECLARE
+  tr_hdig jsonb := '{
+    "G":[1,0],"H":[1,1],
+    "J":[2,0],"K":[2,1],"L":[2,2],"M":[2,3],
+    "N":[3,0],"P":[3,1],"Q":[3,2],"R":[3,3],
+    "S":[3,4],"T":[3,5],"V":[3,6],"Z":[3,7]
+  }'::jsonb;
+  tr_full jsonb := '{
+    "0":0,"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,
+    "9":9,"A":10,"B":11,"C":12,"D":13,"E":14,"F":15
+  }'::jsonb;
+  tr_full32 jsonb := '{
+    "0":0,"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,
+    "9":9,"B":10,"C":11,"D":12,"F":13,"G":14,"H":15,"J":16,
+    "K":17,"L":18,"M":19,"N":20,"P":21,"Q":22,"R":23,"S":24,
+    "T":25,"U":26,"V":27,"W":28,"X":29,"Y":30,"Z":31
+    }'::jsonb;
+  blk text[];
+  bits varbit;
+  n int;
+  i char;
+  ret varbit;
+  BEGIN
+  ret = '';
+  blk := regexp_match(p_val,'^([0-9A-F]*)([GHJ-NP-TVZ])?$');
+  IF blk[1] >'' AND p_base <> 32 THEN
+    FOREACH i IN ARRAY regexp_split_to_array(blk[1],'') LOOP
+      ret := ret || CASE p_base
+        WHEN 16 THEN (tr_full->>i)::int::bit(4)::varbit
+        WHEN 8 THEN (tr_full->>i)::int::bit(3)::varbit
+        WHEN 4 THEN (tr_full->>i)::int::bit(2)::varbit
+        END;
+    END LOOP;
+  END IF;
+  IF blk[2] >'' AND p_base <> 32 THEN
+    n = (tr_hdig->blk[2]->>0)::int;
+    ret := ret || CASE n
+      WHEN 1 THEN (tr_hdig->blk[2]->>1)::int::bit(1)::varbit
+      WHEN 2 THEN (tr_hdig->blk[2]->>1)::int::bit(2)::varbit
+      WHEN 3 THEN (tr_hdig->blk[2]->>1)::int::bit(3)::varbit
+      END;
+  END IF;
+  blk := regexp_match(p_val,'^([0123456789BCDFGHJKLMNPQRSTUVWXYZ]*)$');
+  IF blk[1] >'' AND p_base = 32 THEN
+    FOREACH i IN ARRAY regexp_split_to_array(blk[1],'') LOOP
+      ret := ret || (tr_full32->>i)::int::bit(5)::varbit;
+    END LOOP;
+  END IF;
+
+  RETURN ret;
+  END
+$f$ LANGUAGE PLpgSQL IMMUTABLE;
+-- select baseh_to_vbit('F3V',16);
 
 -- -- -- -- -- --
 -- Main functions
