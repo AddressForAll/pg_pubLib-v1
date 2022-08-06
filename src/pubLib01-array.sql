@@ -179,10 +179,11 @@ CREATE or replace FUNCTION array_distinct_sort (
 $f$ language SQL strict IMMUTABLE;
 
 CREATE or replace FUNCTION array_merge_sort(
-  ANYARRAY, ANYARRAY, boolean DEFAULT true
-) RETURNS ANYARRAY AS $wrap$
+  anycompatiblearray, anycompatiblearray, boolean DEFAULT true
+) RETURNS anycompatiblearray AS $wrap$
   SELECT array_distinct_sort(array_cat($1,$2),$3)
 $wrap$ language SQL IMMUTABLE;
+
 
 CREATE or replace FUNCTION array_cat_distinct(a anyarray, b anyarray) RETURNS anyarray AS $f$
   SELECT CASE WHEN a is null THEN b WHEN b is null THEN a ELSE (
@@ -194,9 +195,9 @@ $f$  LANGUAGE SQL IMMUTABLE;
 
 
 -- https://stackoverflow.com/a/46849678
-CREATE AGGREGATE array_concat_agg(anycompatiblearray) (
+CREATE AGGREGATE array_concat_agg(anyarray) (
   SFUNC = array_cat,
-  STYPE = anycompatiblearray
+  STYPE = anyarray  -- or? anycompatiblearray
 );
 
 -----------

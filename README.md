@@ -10,12 +10,11 @@ PubLib is also a [Library of Snippets](https://wiki.postgresql.org/wiki/Category
 implementating small and frequently used functions.
 Typical  "small function" are also [IMMUTABLE](https://www.postgresql.org/docs/current/xfunc-volatility.html) ones.
 
-## Usage
+## Usage recomendation
 
-Your project not need to copy all source-code of this *git* (that is the "PubLib Central-v1"), so,
-in general PubLib functions of your project are a subset of the PubLib-central.
-Each project selects the functions it needs, maintaining it updated to be compatible with newer ones,
-of other projects, in the same database or same "ecosystem".
+Your project not need to copy all source-code of this *git*. Select only the SQL files (group of functions) that your project need, maintaining it updated to be compatible with newer ones. If this *git* is updated, you can update also your subset of selected functions.  
+
+All other projects, in the same database or same "ecosystem", will use the same function names and same *git* reference for updates.
 
 ## Lib Organization
 
@@ -38,4 +37,4 @@ Libs also labeled by "dependence level"; for example Array library has no depend
 
 ## Installation
 
-See [docs/install.md](/docs/install.md).
+See [docs/install.md](/docs/install.md), using `make`.

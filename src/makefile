@@ -5,7 +5,7 @@ pg_uri      =$(pg_uri_root)/$(pg_db)
 
 
 ini:
-	@echo "---- making pubLib -----"
+	@echo "---- making pubLib pg_db=$(pg_db) -----"
 	@echo " will change databse: $(pg_uri)"
 	@echo " use make all"
 

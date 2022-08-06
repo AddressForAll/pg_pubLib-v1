@@ -9,6 +9,9 @@
  * -- see also pubLib05hcode-distrib.sql
  */
 
+ CREATE extension IF NOT EXISTS postgis;
+
+
 CREATE or replace FUNCTION geohash_GeomsFromPrefix(
   prefix text DEFAULT ''
 ) RETURNS TABLE(ghs text, geom geometry) AS $f$
