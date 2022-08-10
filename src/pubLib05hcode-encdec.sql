@@ -300,7 +300,7 @@ DECLARE
 BEGIN
  FOR i in 0..(bit_length-1) LOOP
    IF i % 2 = 0 THEN
-     mid := (max_y + min_y) / 2.0;
+     mid := (max_y + min_y)::float / 2.0;
      IF y > mid THEN
        bit_string := bit_string || B'1';
        min_y := mid;
@@ -309,7 +309,7 @@ BEGIN
        max_y := mid;
      END IF;
    ELSE
-     mid := (max_x + min_x) / 2.0;
+     mid := (max_x + min_x)::float / 2.0;
      IF x > mid THEN
        bit_string := bit_string || B'1';
        min_x := mid;
@@ -426,14 +426,14 @@ BEGIN
    FOR i IN 0..(bit_length(code)-1) LOOP
       bit = get_bit(code,i);
       IF i % 2 = 0 THEN
-        mid = (max_y + min_y) / 2;
+        mid = (max_y + min_y)::float / 2.0;
         IF bit = 1 THEN
           min_y := mid;
         ELSE
           max_y := mid;
         END IF;
       ELSE
-        mid = (max_x + min_x) / 2;
+        mid = (max_x + min_x)::float / 2.0;
         IF bit =1 THEN
           min_x = mid;
         ELSE
