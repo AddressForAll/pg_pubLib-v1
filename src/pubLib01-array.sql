@@ -195,9 +195,10 @@ $f$  LANGUAGE SQL IMMUTABLE;
 
 
 -- https://stackoverflow.com/a/46849678
-CREATE AGGREGATE array_concat_agg(anyarray) (
+-- https://www.postgresql.org/docs/current/release-14.html
+CREATE AGGREGATE array_concat_agg(anycompatiblearray) (
   SFUNC = array_cat,
-  STYPE = anyarray  -- or? anycompatiblearray
+  STYPE = anycompatiblearray
 );
 
 -----------
