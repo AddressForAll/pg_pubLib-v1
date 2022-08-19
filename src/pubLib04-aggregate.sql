@@ -2,10 +2,10 @@ CREATE or replace FUNCTION  stragg_prefix(prefix text, s text[], sep text defaul
   SELECT string_agg(x,sep) FROM ( select prefix||(unnest(s)) ) t(x)
 $f$ LANGUAGE SQL IMMUTABLE;
 
-DROP AGGREGATE IF EXISTS array_agg_cat(anyarray) CASCADE;
-CREATE AGGREGATE array_agg_cat(anyarray) (
+DROP AGGREGATE IF EXISTS array_agg_cat(anycompatiblearray) CASCADE;
+CREATE AGGREGATE array_agg_cat(anycompatiblearray) (
   SFUNC=array_cat,
-  STYPE=anyarray,
+  STYPE=anycompatiblearray,
   INITCOND='{}'
 );
 
