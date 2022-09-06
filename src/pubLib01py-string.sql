@@ -32,11 +32,10 @@ CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text) RETURNS text AS $f$
 $f$ LANGUAGE PLpython3u IMMUTABLE;
 
 
---CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text, flow_style boolean) RETURNS text AS $f$
-    --import yaml
-    ----https://stackoverflow.com/questions/14024783/forcing-pyyaml-to-dump-consistently
-    --return yaml.dump(yaml.load( p_jsonb ), allow_unicode=True, default_flow_style=flow_style)
---$f$ LANGUAGE PLpython3u IMMUTABLE;
+CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text, flow_style boolean) RETURNS text AS $f$
+    import yaml
+    return yaml.dump(yaml.load( p_jsonb ), allow_unicode=True, default_flow_style=flow_style)
+$f$ LANGUAGE PLpython3u IMMUTABLE;
 
 CREATE or replace FUNCTION file_exists(p_file text) RETURNS boolean AS $f$
     import os
