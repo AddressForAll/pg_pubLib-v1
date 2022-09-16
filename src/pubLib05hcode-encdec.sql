@@ -31,7 +31,7 @@ $f$ LANGUAGE SQL IMMUTABLE;
  * @see http://osm.codes/_foundations/art1.pdf
  * @version 1.0.1.
  */
-CREATE FUNCTION vbit_to_baseh(
+CREATE or replace FUNCTION vbit_to_baseh(
   p_val varbit,  -- input
   p_base int DEFAULT 4, -- selecting base2h, base4h, base8h, base16h or base32
   p_size int DEFAULT 0
@@ -53,7 +53,7 @@ DECLARE
       '[0:31]={J,K,L,M,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --3. 8h,16h    2bit
       '[0:31]={0,1,2,3,4,5,6,7,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --4. 8h        3bit
       '[0:31]={N,P,Q,R,S,T,V,Z,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --5. 16h       3bit
-      '[0:31]={0,1,2,3,4,5,6,7,8,9,a,b,c,d,e,f,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --6. 16h       4bit
+      '[0:31]={0,1,2,3,4,5,6,7,8,9,A,B,C,D,E,F,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}'::"char"[], --6. 16h       4bit
       '[0:31]={0,1,2,3,4,5,6,7,8,9,B,C,D,F,G,H,J,K,L,M,N,P,Q,R,S,T,U,V,W,X,Y,Z}'::"char"[]  --7. 32        5bit
     ]; -- jumpping I,O and U,W,X letters!
        -- the standard alphabet is https://tools.ietf.org/html/rfc4648#section-6
