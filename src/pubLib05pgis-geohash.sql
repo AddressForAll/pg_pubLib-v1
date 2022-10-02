@@ -248,3 +248,91 @@ COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB,geometry,float)
   IS 'Wrap for geohash_GeomsMosaic_jinfo, adding optional area and density values'
 ;
 -- SELECT * FROM geohash_GeomsMosaic_jinfo('{"7h2":300,"7h2w":200,"7h2wju":245,"6urz":123,"7h2wju5222":1}'::jsonb, '{"area":1,"density_km2":"val"}'::jsonb);
+
+
+
+CREATE or replace FUNCTION geohash_neighbors_brute(hash text) RETURNS text[] AS $f$
+ SELECT
+  array_agg(ST_GeoHash(
+    ST_MakePoint(ST_X(pt) + x*360.0/d, ST_Y(pt) + y*180.0/d),
+    len
+  ))
+ FROM
+  (SELECT LENGTH(hash) AS len) t,
+  LATERAL CAST(2^CEIL(len / 2.0)*4^len AS FLOAT) AS d,
+  LATERAL ST_PointFromGeoHash(hash, len) AS pt,
+  Generate_Series(-1, 1) AS x,
+  Generate_Series(-1, 1) AS y
+ WHERE NOT (x = 0 AND y = 0)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_neighbors_brute(text)
+  IS 'Obtains Geohash neighbors by a brute-force algorithm. With erros, see https://gis.stackexchange.com/a/431410/7505'
+;
+
+
+CREATE or replace FUNCTION geohash_adjacent(
+  geohash text,  -- Cell to which adjacent cell is required.
+  direction text   -- Direction from geohash (N/S/E/W).
+) RETURNS text AS $f$
+    -- based on https://www.movable-type.co.uk/scripts/geohash.html
+    -- based on https://github.com/davetroy/geohash-js
+    -- exemplo de input, '1234'
+    WITH prepare AS (
+      SELECT *, CASE WHEN length(geohash)=0 OR direction !~ '^[nsew]$' THEN true ELSE false END AS error
+      FROM (
+        SELECT lower(geohash) AS geohash,
+               lower(direction) AS direction,
+               json_build_object(
+                'n', '["p0r21436x8zb9dcf5h7kjnmqesgutwvy","bc01fg45238967deuvhjyznpkmstqrwx"]'::jsonb,
+                's', '["14365h7k9dcfesgujnmqp0r2twvyx8zb","238967debc01fg45kmstqrwxuvhjyznp"]'::jsonb,
+                'e', '["bc01fg45238967deuvhjyznpkmstqrwx","p0r21436x8zb9dcf5h7kjnmqesgutwvy"]'::jsonb,
+                'w', '["238967debc01fg45kmstqrwxuvhjyznp","14365h7k9dcfesgujnmqp0r2twvyx8zb"]'::jsonb
+               ) AS neighbour,
+               json_build_object(
+                'n', '[ "prxz",     "bcfguvyz" ]'::jsonb,
+                's', '[ "028b",     "0145hjnp" ]'::jsonb,
+                'e', '[ "bcfguvyz", "prxz"     ]'::jsonb,
+                'w', '[ "0145hjnp", "028b"     ]'::jsonb
+             ) AS border,
+             right(geohash,1) AS lastCh,               -- last character of hash. '4'
+             left(geohash,length(geohash)-1) AS parent, -- hash without last character. '123'... Or NULL
+             length(geohash) % 2 AS type,
+             '0123456789bcdefghjkmnpqrstuvwxyz' AS base32_alphabet
+        ) t0
+    )
+            --  append letter for direction to parent:
+    SELECT parent || substring(base32_alphabet, position(lastCh IN neighbour->direction->>type), 1)
+    FROM (
+       SELECT geohash,direction,neighbour,border,lastch,type, error,base32_alphabet,
+           CASE -- check for edge-cases which don't share common prefix:
+              WHEN error THEN NULL
+              WHEN position(lastCh IN border->direction->>type)>0 AND parent is not NULL THEN geohash_adjacent(parent, direction)
+           ELSE parent
+         END AS parent
+       FROM prepare
+    ) t2
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_adjacent(text,text)
+  IS 'Determines adjacent cell in given direction. Returns the geocode of adjacent cell.'
+;
+
+CREATE or replace FUNCTION geohash_neighbours_directions(geohash text) RETURNS jsonb AS $f$
+  SELECT json_build_object(
+        'n',  geohash_adjacent(geohash, 'n'),
+        'ne', geohash_adjacent(geohash_adjacent(geohash, 'n'), 'e'),
+        'e',  geohash_adjacent(geohash, 'e'),
+        'se', geohash_adjacent(geohash_adjacent(geohash, 's'), 'e'),
+        's',  geohash_adjacent(geohash, 's'),
+        'sw', geohash_adjacent(geohash_adjacent(geohash, 's'), 'w'),
+        'w',  geohash_adjacent(geohash, 'w'),
+        'nw', geohash_adjacent(geohash_adjacent(geohash, 'n'), 'w')
+    )
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION geohash_neighbours_directions(text)
+  IS 'Returns all 8 adjacent cells to specified geohash. Returns {n,ne,e,se,s,sw,w,nw: string}.'
+;
+
+CREATE or replace FUNCTION geohash_neighbours(geohash text) RETURNS text[] AS $wrap$
+  SELECT array[n->>'n', n->>'ne', n->>'e', n->>'se', n->>'s', n->>'sw', n->>'w', n->>'nw']
+  FROM (SELECT geohash_neighbours_directions(geohash)) t(n)
+$wrap$ LANGUAGE SQL IMMUTABLE;
