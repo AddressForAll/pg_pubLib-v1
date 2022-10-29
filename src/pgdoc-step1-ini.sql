@@ -25,6 +25,21 @@ CREATE TABLE pgdoc.assert (
   UNIQUE(query)  -- aboids basic copy/paste duplication
 );
 
+
+CREATE TABLE pgdoc.selected_docs (
+  grlabel text,    -- group label
+  -- same strutucture as doc_UDF_show() from here: 
+  oid oid,
+  schema_name text,
+  name text,
+  language text,
+  arguments text,
+  return_type text,
+  definition text,
+  prokind text,
+  comment text,
+);
+
 -- -- -- -- -- --
 -- -- Functions
 
