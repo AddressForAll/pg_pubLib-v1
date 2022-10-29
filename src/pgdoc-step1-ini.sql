@@ -9,7 +9,7 @@
 
 
 CREATE EXTENSION IF NOT EXISTS xml2;
-DROP SCHEMA IF EXISTS pgdoc;
+DROP SCHEMA IF EXISTS pgdoc CASCADE;
 CREATE SCHEMA pgdoc;
 
 -- -- -- -- -- --
@@ -31,6 +31,7 @@ CREATE TABLE pgdoc.assert (
 CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asJSONb(
     p_schema_name text,    -- schema choice
     p_regex_or_like text,   -- name filter
+    p_name_notlike text DEFAULT '',
     p_include_udf_pubid boolean DEFAULT false
 ) RETURNS SETOF jsonb AS $f$
 
@@ -42,7 +43,7 @@ CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asJSONb(
            CASE WHEN arguments!=array_to_string(arguments_simplified,', ') THEN arguments ELSE NULL END AS str_fullargs,
            a.examples
            -- CASE WHEN a.udf_pubid IS NOT NULL THEN '<p>'||queries_xhtml||'</p>' ELSE '' END AS if_examples
-    FROM doc_UDF_show_simple(p_schema_name,p_regex_or_like) u
+    FROM doc_UDF_show_simple(p_schema_name,p_regex_or_like,p_name_notlike) u
          LEFT JOIN (
            SELECT udf_pubid,
                   '<code>'||string_agg(query,'</code> <br/> <code>')||'</code>' as examples
@@ -58,6 +59,7 @@ $f$  LANGUAGE SQL IMMUTABLE;
 CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
     p_schema_name text,    -- schema choice
     p_regex_or_like text,   -- name filter
+    p_name_notlike text DEFAULT '',
     p_include_udf_pubid boolean DEFAULT false
 ) RETURNS xml AS $f$
 
@@ -82,7 +84,7 @@ CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
            )::xml )
     
          )
-     FROM pgdoc.doc_UDF_show_simple_asJSONb(p_schema_name,p_regex_or_like,p_include_udf_pubid) t(template_input)
+     FROM pgdoc.doc_UDF_show_simple_asJSONb(p_schema_name,p_regex_or_like,p_name_notlike,p_include_udf_pubid) t(template_input)
      
 $f$  LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asXHTML
