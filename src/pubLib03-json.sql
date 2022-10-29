@@ -163,15 +163,35 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jso
 $f$ language SQL IMMUTABLE;
 */
 
+-----
+
+CREATE or replace FUNCTION jsonb_pretty(
+  jsonb,            -- input
+  compact boolean   -- true for compact format
+) RETURNS text AS $f$
+  SELECT CASE
+    WHEN $2 THEN  ($1::json)::text
+    ELSE  jsonb_pretty($1)
+  END
+  -- from https://stackoverflow.com/a/27536804/287948
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION jsonb_pretty(jsonb,boolean)
+  IS 'Extends jsonb_pretty() to return canonical compact form when true';
+-- SELECT jsonb_pretty(  jsonb_build_object('a',1, 'bla','bla bla'), true );
+
 CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) RETURNS text AS $f$
  -- jsonB input
  SELECT CASE opt
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input)
    WHEN 2  THEN regexp_replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), ' ?\{"type": "Feature", "geometry":', E'\n{"type": "Feature", "geometry":', 'g') || E'\n'  -- GeoJSON
-   WHEN 3  THEN replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'),' ','') || E'\n'  -- GeoJSON
+   WHEN 3  THEN replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), ' ', '') || E'\n'  -- GeoJSON
+   WHEN 4  THEN jsonb_pretty(j_input,true)  -- canonical compact form
    END
 $f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION json_pretty_lines(jsonB,int)
+  IS 'Alternatives for jsonb_pretty() to return one item per line: 0 = to_text with no formating, 1=standard pretty, 2=GeoJSON preserving type, 3=GeoJSON removing type, 4=compact form';
+
 
 CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RETURNS text AS $f$
  -- json input (not jsonB!) 
@@ -179,19 +199,9 @@ CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RE
    WHEN 0  THEN j_input::text
    WHEN 1  THEN jsonb_pretty(j_input::jsonb)
    WHEN 2  THEN regexp_replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), ' ?\{"type": "Feature", "geometry":', E'\n{"type": "Feature", "geometry":', 'g') || E'\n'  -- GeoJSON
-   WHEN 3  THEN replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'),' ','') || E'\n'  -- GeoJSON
+   WHEN 3  THEN replace(regexp_replace(j_input::text, ' ?\{"type": "Feature", "geometry":\n', '{"type": "Feature", "geometry": ', 'g'), ' ', '') || E'\n'  -- GeoJSON
+   WHEN 4  THEN json_strip_nulls(j_input)::text -- canonical compact form, same as jsonb_pretty(j,true)
    END
 $f$ language SQL IMMUTABLE;
-
-CREATE or replace FUNCTION jsonb_pretty(
-  jsonb,            -- input
-  compact boolean   -- true for compact format
-) RETURNS text AS $$
-  SELECT CASE
-    WHEN $2=true THEN json_strip_nulls($1::json)::text
-    ELSE  jsonb_pretty($1)
-  END
-  -- from https://stackoverflow.com/a/27536804/287948
-$$ LANGUAGE SQL IMMUTABLE;
--- SELECT jsonb_pretty(  jsonb_build_object('a',1, 'bla','bla bla'), true );
-
+COMMENT ON FUNCTION json_pretty_lines(json,int)
+  IS 'Format JSON like jsonB_pretty() to return one item per line: 0 = to_text with no formating, 1=standard Pretty, 2=GeoJSON preserving type, 3=GeoJSON removing type, 4=compact form';
