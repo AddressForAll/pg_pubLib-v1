@@ -32,3 +32,29 @@ And the Guide about [PLpgSQL interpreter](https://www.postgresql.org/docs/curren
 > The PL/pgSQL interpreter parses the function's source text and produces an internal binary instruction tree the first time the function is called (within each session). The instruction tree fully translates the PL/pgSQL statement structure, but individual SQL expressions and SQL commands used in the function are not translated immediately.
 
 > As each expression and SQL command is first executed in the function, the PL/pgSQL interpreter parses and analyzes the command to create a prepared statement, using the SPI manager's SPI_prepare function. Subsequent visits to that expression or command reuse the prepared statement. (...)
+
+## Document generator
+
+Based on `pg_proc`, `information_schema.routines` and others, the ***User Defined Function* (UDF) descriptor** set of functions allow you to filter and display with XHTML the SQL-comments, along with the function expression, similar to the PostgreSQL Functions Guide (e.g. [string-functions Guide](https://www.postgresql.org/docs/current/functions-string.html)).
+
+See framework at [src/pgdoc-step1-ini.sql](..src/pgdoc-step1-ini.sql) and functions at [src/pubLib03-admin.sql](..src/pubLib03-admin.sql).
+
+Use examples:
+```sql
+-- all public UDF functions except PostGIS 'ST_' prefix:
+SELECT count(*) n FROM doc_UDF_show('public', '', 'ST_%');
+SELECT count(*) n FROM doc_UDF_show('public', '');
+-- Save as markdown file:
+SELECT volat_file_write( '/tmp/lix00gen.md',
+  pgdoc.doc_UDF_show_simple_asXHTML( 'public', '', 'ST_%', false)::text 
+);
+
+-- 01 array:
+SELECT volat_file_write( '/tmp/lix01arr.md',
+  pgdoc.doc_UDF_show_simple_asXHTML( 'public', '^(pg_csv_head|pg_csv_head_tojsonb|jsonb_to_bigints|jsonb_to_bigints|unnest_2d_1d|array_.+)$', '', false)::text 
+);
+-- 02 string:
+SELECT volat_file_write( '/tmp/lix02str.md',
+  pgdoc.doc_UDF_show_simple_asXHTML( 'public', '^(to_bigint|to_integer|to_hex|stragg_prefix|str_urldecode|str_abbrev.+)$', '', false)::text 
+);
+```
