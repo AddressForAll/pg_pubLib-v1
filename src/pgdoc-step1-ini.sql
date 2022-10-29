@@ -54,6 +54,9 @@ CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asJSONb(
   ) t;
 
 $f$  LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asJSONb
+  IS 'Generates a JSONb array of descriptors with each standard UFD documentation.'
+;
 -- SELECT pgdoc.doc_UDF_show_simple_asJSONb( 'public', '^(iif|round|round|minutes|trunc_bin)$' );
 
 CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
@@ -87,8 +90,8 @@ CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
      FROM pgdoc.doc_UDF_show_simple_asJSONb(p_schema_name,p_regex_or_like,p_name_notlike,p_include_udf_pubid) t(template_input)
      
 $f$  LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asXHTML
-  IS 'Generates a XHTML table with standard UFD documentation.'
+COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(text,text,text,boolean)
+  IS 'Generates a XHTML table with standard UFD documentation, from doc_UDF_show_simple_asJSONb().'
 ;
 -- SELECT volat_file_write( '/tmp/lix.md', pgdoc.doc_UDF_show_simple_asXHTML( 'public', '^(iif|round|round|minutes|trunc_bin)$', false)::text );
 -- SELECT xml_pretty( pgdoc.doc_UDF_show_simple_asXHTML( 'public', '^(iif|round|round|minutes|trunc_bin)$', true)  );
