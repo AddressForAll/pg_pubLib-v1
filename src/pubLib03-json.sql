@@ -205,3 +205,27 @@ CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RE
 $f$ language SQL IMMUTABLE;
 COMMENT ON FUNCTION json_pretty_lines(json,int)
   IS 'Format JSON like jsonB_pretty() to return one item per line: 0 = to_text with no formating, 1=standard Pretty, 2=GeoJSON preserving type, 3=GeoJSON removing type, 4=compact form';
+
+----
+
+CREATE FUNCTION csv_to_jsonb(
+  p_info text,           -- the CSV line
+  coltypes_sql text[],   -- the datatype list
+  rgx_sep text DEFAULT '\|'  -- CSV separator, by regular expression
+) RETURNS JSONb AS $f$
+  -- from https://stackoverflow.com/a/64988973/287948
+  SELECT to_jsonb(a) FROM (
+      SELECT array_agg(CASE
+          WHEN tp IN ('int','integer','smallint','bigint') THEN to_jsonb(p::bigint)
+          WHEN tp IN ('number','numeric','float','double') THEN  to_jsonb(p::numeric)
+          WHEN tp='boolean' THEN to_jsonb(p::boolean)
+          WHEN tp IN ('json','jsonb','object','array') THEN p::jsonb
+          ELSE to_jsonb(p)
+        END) a
+      FROM regexp_split_to_table(p_info,rgx_sep) WITH ORDINALITY t1(p,i)
+      INNER JOIN unnest(coltypes_sql) WITH ORDINALITY t2(tp,j)
+      ON i=j
+  ) t
+$f$ language SQL immutable;
+COMMENT ON FUNCTION csv_to_jsonb(text,text[],text)
+  IS 'Atomic SQL-to-JSON datatypes convertions, starting from CSV lines and its column definition';
