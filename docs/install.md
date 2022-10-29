@@ -9,10 +9,15 @@ The SQL source code, at [/src](http://git.AddressForAll.org/pg_pubLib-v1/tree/ma
 
 ```mermaid
 graph LR
+    x3["03-{admin,json}"]
+    x5h["05hcode-{distrib,encdec}"]
+    x5gis["05pgis-{extraSRID,geohash,misc}"]
     00-general --> 01-array & 01py-string
-    01-array --> 02-string --> 03-admin.sql & 03-json --> 04-aggregate
-    04-aggregate --> 05hcode-distrib & 05pgis-extraSRID.sql & 05pgis-geohash.sql --> 06pgis-geoJSON
+    01-array --> 02-string --> x3 --> 04-aggregate
+    04-aggregate --> x5h & x5gis & 05xml-general
+    x5gis & x5h --> 06pgis-geoJSON
 ```
+<!-- Strictly speaking it is just an "installation sequence" diagram, the dependency between functions can have a simpler chain.-->
 
 ## Installing all library
 
