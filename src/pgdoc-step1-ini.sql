@@ -25,20 +25,13 @@ CREATE TABLE pgdoc.assert (
   UNIQUE(query)  -- aboids basic copy/paste duplication
 );
 
-
 CREATE TABLE pgdoc.selected_docs (
   grlabel text,    -- group label
-  -- same strutucture as doc_UDF_show() from here: 
-  oid oid,
-  schema_name text,
-  name text,
-  language text,
-  arguments text,
-  return_type text,
-  definition text,
-  prokind text,
-  comment text,
+  -- same strutucture as doc_UDF_show_simplelines_asXHTML or doc_UDF_show() from here: 
+  jinfo jsonb,
+  xrendered xml
 );
+-- INSERT INTO  pgdoc.selected_docs SELECT 'a', * FROM doc_UDF_show_simplelines_asXHTML('public','','^(ST_|_st_|geometry_)') WHERE j->>'language'!='c';
 
 -- -- -- -- -- --
 -- -- Functions
@@ -74,19 +67,16 @@ COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asJSONb
 ;
 -- SELECT pgdoc.doc_UDF_show_simple_asJSONb( 'public', '^(iif|round|round|minutes|trunc_bin)$' );
 
-CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
+
+CREATE or replace FUNCTION pgdoc.doc_UDF_show_simplelines_asXHTML(
     p_schema_name text,    -- schema choice
     p_regex_or_like text,   -- name filter
     p_name_notlike text DEFAULT '',
     p_include_udf_pubid boolean DEFAULT false
-) RETURNS xml AS $f$
-
-  SELECT xmlelement(
-           name table,
-           xmlattributes('pgdoc_tab' as class),
-           concat('<tr>', CASE WHEN p_include_udf_pubid THEN '<td> ID </td>' ELSE '' END, '<td> Function / Description / Example </td></tr>')::xml,
-    
-           xmlagg( jsonb_mustache_render(
+) RETURNS table (j jsonb, xrendered xml) AS
+$f$
+  SELECT template_input as j,
+         jsonb_mustache_render(
               $$<tr>
                 {{#include_udf_pubid}}<td>{{id}}</td>{{/include_udf_pubid}}
                 <td>
@@ -99,11 +89,27 @@ CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
              
               template_input
              
-           )::xml )
-    
+         )::xml
+   FROM pgdoc.doc_UDF_show_simple_asJSONb(p_schema_name,p_regex_or_like,p_name_notlike,p_include_udf_pubid) t(template_input)
+$f$  LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION pgdoc.doc_UDF_show_simplelines_asXHTML(text,text,text,boolean)
+  IS 'Generates a XHTML-row per function, with standard UFD documentation, from doc_UDF_show_simple_asJSONb().'
+;
+
+CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(
+    p_schema_name text,    -- schema choice
+    p_regex_or_like text,   -- name filter
+    p_name_notlike text DEFAULT '',
+    p_include_udf_pubid boolean DEFAULT false
+) RETURNS xml AS
+$f$
+  SELECT xmlelement(
+           name table,
+           xmlattributes('pgdoc_tab' as class),
+           concat('<tr>', CASE WHEN p_include_udf_pubid THEN '<td> ID </td>' ELSE '' END, '<td> Function / Description / Example </td></tr>')::xml,
+           xmlagg(xrendered)
          )
-     FROM pgdoc.doc_UDF_show_simple_asJSONb(p_schema_name,p_regex_or_like,p_name_notlike,p_include_udf_pubid) t(template_input)
-     
+  FROM pgdoc.doc_UDF_show_simplelines_asXHTML(p_schema_name,p_regex_or_like,p_name_notlike,p_include_udf_pubid)
 $f$  LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(text,text,text,boolean)
   IS 'Generates a XHTML table with standard UFD documentation, from doc_UDF_show_simple_asJSONb().'
