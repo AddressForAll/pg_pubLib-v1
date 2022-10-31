@@ -8,6 +8,18 @@ CREATE extension IF NOT EXISTS postgis;
 -- -- -- -- -- -- -- -- -- --
 -- -- -- UTM Zone Functions:
 
+CREATE or replace FUNCTION str_url_todomain(
+  url text,
+  command text DEFAULT NULL --'rdap -j'
+) RETURNS text AS $f$
+   -- see https://stackoverflow.com/a/37835341/287948
+   SELECT CASE WHEN command>'' THEN trim(command)||' ' ELSE '' END
+          ||  regexp_replace(lower(trim(url,' /')), '(^(https?|s?ftp)://(?:www\d?\.)?)|(/.+$)|(^[^\.]+$)', '', 'g')
+$f$ LANGUAGE SQL IMMUTABLE;
+
+-- -- -- -- -- -- -- -- -- --
+-- -- -- UTM Zone Functions:
+
 CREATE or replace FUNCTION utmzone_from4326(
   p_geom geometry(Point,4326)
 ) RETURNS integer[] AS $f$
