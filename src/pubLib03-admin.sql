@@ -198,8 +198,8 @@ CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
                    ELSE routines.routine_name::text ~* p_name_like END
             ELSE true END
         AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN 
-              CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(routines.routine_name iLIKE p_name_notlike)
-              ELSE NOT(pg_proc.proname::text ~* p_name_notlike) END
+              CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(routines.routine_name::text iLIKE p_name_notlike)
+              ELSE NOT(routines.routine_name::text ~* p_name_notlike) END
             ELSE true END
   GROUP BY routines.specific_name, 2, 3
   ORDER BY routines.routine_name, routines.specific_name
