@@ -246,6 +246,7 @@ COMMENT ON FUNCTION doc_UDF_transparent_id(text,text[],int)
 ;
 -- SELECT doc_UDF_transparent_id('doc_UDF_show','{text,text,text,oid}');
 
+DROP FUNCTION doc_UDF_show_simple;
 CREATE or replace FUNCTION doc_UDF_show_simple(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
@@ -256,6 +257,8 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
   oid oid,
   schema_name text,
   name text,
+  language text, --new
+  definition_md5 text, -- version control
   arguments_simplified text[],
   arguments text,
   return_type text,
@@ -264,6 +267,7 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
 ) AS $f$
   SELECT doc_UDF_transparent_id(u.schema_name, u.name::text, s.arguments_simplified::text[]) AS id,
          u.oid, u.schema_name, u.name::text,
+         u.language, md5(u.definition),
          s.arguments_simplified::text[] as arguments_simplified,
          u.arguments::text AS arguments,
          u.return_type, u.prokind, u.comment
