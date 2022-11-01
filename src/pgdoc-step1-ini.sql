@@ -121,25 +121,28 @@ COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(text,text,text,boolean)
 
 ------
 
-CREATE FUNCTION pgdoc.doc_UDF_showselected_asMD_file(
+CREATE or replace FUNCTION pgdoc.doc_UDF_showselected_asMD_file(
   fpath text default '/tmp/',
   p_include_udf_pubid boolean DEFAULT false
-) RETURNS text AS
+) RETURNS SETOF text AS
 $f$
-  SELECT volat_file_write(
-     fpath||file,
-     string_agg('## '|| grlabel || E'\n' || xcontent::text, E'\n\n')
-    )
-  FROM (
-    SELECT file, grlabel,
-       xmlelement(
-         name table,
-         xmlattributes('pgdoc_tab' as class),
-         concat('<tr>', CASE WHEN p_include_udf_pubid THEN '<td> ID </td>' ELSE '' END, '<td> Function / Description / Example </td></tr>')::xml,
-         xmlagg(xrendered)
-        ) as xcontent
-    FROM pgdoc.selected_docs
-    GROUP BY 1,2 ORDER BY 1, 2
-  ) t1
-  GROUP BY file ORDER BY file
+  WITH files AS (
+    SELECT file, 
+           ' '|| count(*) || ' sections' AS secs,
+           string_agg( '## '|| grlabel || E'\n' ||  regexp_replace(xcontent::text, '\n\s*\n',E'\n','g') ,  E'\n\n' ) AS mdcontent
+    FROM (
+      SELECT file, grlabel,
+         xmlelement(
+           name table,
+           xmlattributes('pgdoc_tab' as class),
+           concat('<tr>', CASE WHEN p_include_udf_pubid THEN '<td> ID </td>' ELSE '' END, '<td> Function / Description / Example </td></tr>')::xml,
+           xmlagg(xrendered)
+          ) as xcontent
+      FROM pgdoc.selected_docs
+      GROUP BY 1,2 ORDER BY 1, 2
+    ) t1
+    GROUP BY file ORDER BY file  
+  ) 
+  SELECT volat_file_write(fpath||file, mdcontent, secs)
+  FROM files;
 $f$  LANGUAGE SQL IMMUTABLE;
