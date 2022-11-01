@@ -26,12 +26,14 @@ CREATE TABLE pgdoc.assert (
 );
 
 CREATE TABLE pgdoc.selected_docs (
-  grlabel text,    -- group label
+  file text  NOT NULL DEFAULT 'test.md', 
+  grlabel text NOT NULL DEFAULT '',    -- group label
   -- same strutucture as doc_UDF_show_simplelines_asXHTML or doc_UDF_show() from here: 
   jinfo jsonb,
   xrendered xml
 );
 -- INSERT INTO  pgdoc.selected_docs SELECT 'a', * FROM doc_UDF_show_simplelines_asXHTML('public','','^(ST_|_st_|geometry_)') WHERE j->>'language'!='c';
+
 
 -- -- -- -- -- --
 -- -- Functions
@@ -116,3 +118,28 @@ COMMENT ON FUNCTION pgdoc.doc_UDF_show_simple_asXHTML(text,text,text,boolean)
 ;
 -- SELECT volat_file_write( '/tmp/lix.md', pgdoc.doc_UDF_show_simple_asXHTML( 'public', '^(iif|round|round|minutes|trunc_bin)$', false)::text );
 -- SELECT xml_pretty( pgdoc.doc_UDF_show_simple_asXHTML( 'public', '^(iif|round|round|minutes|trunc_bin)$', true)  );
+
+------
+
+CREATE FUNCTION pgdoc.doc_UDF_showselected_asMD_file(
+  fpath text default '/tmp/',
+  p_include_udf_pubid boolean DEFAULT false
+) RETURNS text AS
+$f$
+  SELECT volat_file_write(
+     fpath||file,
+     string_agg('## '|| grlabel || E'\n' || xcontent::text, E'\n\n')
+    )
+  FROM (
+    SELECT file, grlabel,
+       xmlelement(
+         name table,
+         xmlattributes('pgdoc_tab' as class),
+         concat('<tr>', CASE WHEN p_include_udf_pubid THEN '<td> ID </td>' ELSE '' END, '<td> Function / Description / Example </td></tr>')::xml,
+         xmlagg(xrendered)
+        ) as xcontent
+    FROM pgdoc.selected_docs
+    GROUP BY 1,2 ORDER BY 1, 2
+  ) t1
+  GROUP BY file ORDER BY file
+$f$  LANGUAGE SQL IMMUTABLE;
