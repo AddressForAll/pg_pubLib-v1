@@ -31,7 +31,7 @@ Function group         | Labels | Inspiration / dependence
 [PostGIS](docs/pgis-extraSRID.md) ([src](src/pubLib05pgis-extraSRID.sql))  |  `st`, `postGis`     |  [PostGIS/docs](https://postgis.net/docs/reference.html) / (fixed level-04 dependencies).
 [String](docs/string.md) ([src](src/pubLib01-string.sql))  |  `str`, `string`     |  [pg/docs/functions-string](https://www.postgresql.org/docs/current/functions-string.html) (no dependency).
 [HCodes](docs/hcode-distrib.md) ([src](src/pubLib05hcode-distrib.sql)) | `hcode`, `distrib` |  (Hierarchical or) [Natural Codes](http://addressforall.org/_foundations/art1.pdf) / json, array.
-[Geohash](docs/pgis-geohash.md) ([src](src/pubLib06pgis-geohash.sql)) | `geohash`, `postGis` | [PostGIS/Geohash](https://postgis.net/docs/ST_GeoHash.html) / hcodes, pgis.
+[Geohash](docs/pgis-geohash.md) ([src](src/pubLib05pgis-geohash.sql)) | `geohash`, `postGis` | [PostGIS/Geohash](https://postgis.net/docs/ST_GeoHash.html) / hcodes, pgis.
 
 Libs also labeled by "dependence level"; for example Array library has no dependence, is level 01; JSON depends on Array, is level 03; and GeoJSON library depends on JSON, is level 4. The installation order is the dependency level.
 

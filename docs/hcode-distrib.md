@@ -1,7 +1,7 @@
 
 ## Heurísticas implementadas
 
-See `hcode_distribution_reduce_recursive_raw()` function at https://git.AddressForAll.org/pg_pubLib-v1/blob/main/src/pubLib05hcode-distrib.sql#L225
+See `hcode.distribution_reduce_recursive_raw()` function at https://git.AddressForAll.org/pg_pubLib-v1/blob/main/src/pubLib05hcode-distrib.sql#L225
 
 
 Title                            |p_left_erode                  |p_size_min                 |p_threshold                  |p_threshold_sum
