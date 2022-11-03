@@ -189,7 +189,7 @@ CREATE or replace FUNCTION jsonb_pretty_lines(j_input jsonb, opt int DEFAULT 0) 
    WHEN 4  THEN jsonb_pretty(j_input,true)  -- canonical compact form
    END
 $f$ language SQL IMMUTABLE;
-COMMENT ON FUNCTION json_pretty_lines(jsonB,int)
+COMMENT ON FUNCTION jsonb_pretty_lines(jsonB,int)
   IS 'Alternatives for jsonb_pretty() to return one item per line: 0 = to_text with no formating, 1=standard pretty, 2=GeoJSON preserving type, 3=GeoJSON removing type, 4=compact form';
 
 
