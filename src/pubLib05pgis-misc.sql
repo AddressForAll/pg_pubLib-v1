@@ -14,7 +14,7 @@ CREATE or replace FUNCTION str_url_todomain(
 ) RETURNS text AS $f$
    -- see https://stackoverflow.com/a/37835341/287948
    SELECT CASE WHEN command>'' THEN trim(command)||' ' ELSE '' END
-          ||  regexp_replace(lower(trim(url,' /')), '(^(https?|s?ftp)://(?:www\d?\.)?)|(/.+$)|(^[^\.]+$)', '', 'g')
+          ||  regexp_replace(lower(trim(url,' /')), '(^.*(https?|s?ftp)://(?:www\d?\.)?)|(/.+$)|(^[^\.]+$)', '', 'g')
 $f$ LANGUAGE SQL IMMUTABLE;
 
 -- -- -- -- -- -- -- -- -- --
