@@ -20,7 +20,7 @@ $f$ LANGUAGE SQL IMMUTABLE;
 CREATE or replace FUNCTION str_urls_todomains(
   urls text[]
 ) RETURNS text[] AS $f$
-  SELECT array_agg(d) FROM (SELECT DISTINCT str_url_todomain(UNNEST(urls))  ) t(d) WHERE d>''
+  SELECT array_agg(d) FROM (SELECT DISTINCT str_url_todomain(UNNEST(urls))  ORDER BY 1) t(d) WHERE d>''
 $f$ LANGUAGE SQL IMMUTABLE;
 
 -- -- -- -- -- -- -- -- -- --
