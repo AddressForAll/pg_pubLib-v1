@@ -6,7 +6,7 @@
 CREATE extension IF NOT EXISTS postgis;
 
 -- -- -- -- -- -- -- -- -- --
--- -- -- UTM Zone Functions:
+-- -- -- URI Functions:
 
 CREATE or replace FUNCTION str_url_todomain(
   url text,
@@ -22,6 +22,30 @@ CREATE or replace FUNCTION str_urls_todomains(
 ) RETURNS text[] AS $f$
   SELECT array_agg(d) FROM (SELECT DISTINCT str_url_todomain(UNNEST(urls))  ORDER BY 1) t(d) WHERE d>''
 $f$ LANGUAGE SQL IMMUTABLE;
+
+-- -- -- -- -- -- -- -- -- --
+-- -- -- grid Functions:
+-- see https://github.com/osm-codes/GGeohash/wiki/Convers%C3%A3o-de-grades-de-mesma-proje%C3%A7%C3%A3o
+
+CREATE or replace FUNCTION gridcellgeom_dump(
+  p_geom geometry,
+  p_minlength float DEFAULT NULL
+) RETURNS TABLE (geom geometry) AS $f$
+    SELECT (pt).geom
+    FROM ( SELECT ST_DumpPoints(CASE WHEN p_minlength>0.0 THEN ST_Segmentize(p_geom,p_minlength) ELSE p_geom END) ) t1(pt)
+    UNION ALL
+    SELECT ST_Centroid(p_geom)
+  ) t2
+$f$ LANGUAGE SQL IMMUTABLE;
+
+CREATE or replace FUNCTION gridcellgeom_areas(
+  p_orig_geom geometry,   -- input original cell
+  p_geom_targ geometry[]  -- target-cells covering original cell
+) RETURNS float[] AS $f$
+  array_agg( ST_Area(ST_Intersection(a,b)) / a )
+  FROM (SELECT ST_Area(p_orig_geom) a, unnest(p_geom_targ) b) t
+$f$ LANGUAGE SQL IMMUTABLE;
+
 
 -- -- -- -- -- -- -- -- -- --
 -- -- -- UTM Zone Functions:
