@@ -35,17 +35,29 @@ CREATE or replace FUNCTION gridcellgeom_dump(
     FROM ( SELECT ST_DumpPoints(CASE WHEN p_minlength>0.0 THEN ST_Segmentize(p_geom,p_minlength) ELSE p_geom END) ) t1(pt)
     UNION ALL
     SELECT ST_Centroid(p_geom)
-  ) t2
 $f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION gridcellgeom_dump(geometry,float)
+  IS 'Sample points from an square grid-cell, with optional segmentize. Supposing border-centroid distance greater than p_minlength.'
+;
 
-CREATE or replace FUNCTION gridcellgeom_areas(
+CREATE or replace FUNCTION gridcellgeom_areafrac(
   p_orig_geom geometry,   -- input original cell
-  p_geom_targ geometry[]  -- target-cells covering original cell
+  p_targ_geom geometry[],  -- target-cells covering original cell
+  p_excl_geom geometry DEFAULT NULL -- exclusion zone
 ) RETURNS float[] AS $f$
-  array_agg( ST_Area(ST_Intersection(a,b)) / a )
-  FROM (SELECT ST_Area(p_orig_geom) a, unnest(p_geom_targ) b) t
+  SELECT array_agg( ST_Area(ST_Intersection(p_orig_geom,tgeom)) / area )
+  FROM (
+    SELECT ST_Area(CASE
+                   WHEN p_excl_geom IS NOT NULL AND p_orig_geom && p_excl_geom
+                   THEN ST_Difference(p_orig_geom,p_excl_geom)
+                   ELSE p_orig_geom
+                   END) area,
+           unnest(p_targ_geom) tgeom
+  ) t
 $f$ LANGUAGE SQL IMMUTABLE;
-
+COMMENT ON FUNCTION gridcellgeom_areafrac
+  IS 'Area fraction of an original cell covered by a set of target cells. Matrix used in the original-to-target grid value convertion.'
+;
 
 -- -- -- -- -- -- -- -- -- --
 -- -- -- UTM Zone Functions:
