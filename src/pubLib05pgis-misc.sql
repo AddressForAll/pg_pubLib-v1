@@ -17,6 +17,12 @@ CREATE or replace FUNCTION str_url_todomain(
           ||  regexp_replace(lower(trim(url,' /')), '(^(mailto:)?[^@]+@)|(^.*(https?|s?ftp)://(?:www\d?\.)?)|(/.+$)|(^[^\.]+$)', '', 'g')
 $f$ LANGUAGE SQL IMMUTABLE;
 
+CREATE or replace FUNCTION str_urls_todomains(
+  urls text[]
+) RETURNS text[] AS $f$
+  SELECT array_agg(d) FROM (SELECT DISTINCT str_url_todomain(UNNEST(urls))  ) t(d) WHERE d>''
+$f$ LANGUAGE SQL IMMUTABLE;
+
 -- -- -- -- -- -- -- -- -- --
 -- -- -- UTM Zone Functions:
 
