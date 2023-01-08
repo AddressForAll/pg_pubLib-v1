@@ -208,7 +208,7 @@ COMMENT ON FUNCTION json_pretty_lines(json,int)
 
 ----
 
-CREATE FUNCTION csv_to_jsonb(
+CREATE or replace FUNCTION csv_to_jsonb(
   p_info text,           -- the CSV line
   coltypes_sql text[],   -- the datatype list
   rgx_sep text DEFAULT '\|'  -- CSV separator, by regular expression
@@ -229,3 +229,13 @@ CREATE FUNCTION csv_to_jsonb(
 $f$ language SQL immutable;
 COMMENT ON FUNCTION csv_to_jsonb(text,text[],text)
   IS 'Atomic SQL-to-JSON datatypes convertions, starting from CSV lines and its column definition';
+
+
+CREATE or replace FUNCTION jsonb_array_to_text_array(_js jsonb)
+  RETURNS text[]
+  LANGUAGE sql IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+SELECT ARRAY(SELECT jsonb_array_elements_text(_js));
+END;  -- see https://stackoverflow.com/a/75013711/287948
+COMMENT ON FUNCTION jsonb_array_to_text_array(jsonb)
+  IS 'JSONB-to-SQL_text arrays optimized convertion, for pg14+. See https://dba.stackexchange.com/a/54289/90651';
