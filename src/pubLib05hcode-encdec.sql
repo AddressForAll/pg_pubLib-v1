@@ -56,13 +56,10 @@ CREATE or replace FUNCTION str_geouri_decode(uri text) RETURNS float[] as $f$
       ELSE NULL
     END
   FROM (
-    SELECT regexp_split_to_array(regexp_replace(uri,'^geo:|;.+$','','ig'),',')::float[]  AS a,
+    SELECT regexp_split_to_array(regexp_replace(uri,'^geo:(olc:|ghs:)?|;.+$','','ig'),',')::float[]  AS a,
            (regexp_match(uri,';u=([0-9\.]+)'))[1]  AS u
   ) t
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION str_geouri_decode(text)
   IS 'Decodes standard GeoURI of latitude and longitude into float array.'
 ;
-
-
-
