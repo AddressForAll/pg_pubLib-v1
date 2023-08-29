@@ -277,3 +277,20 @@ $f$ language SQL IMMUTABLE;
 COMMENT ON FUNCTION ROUND(float[],float)
   IS 'ROUND array of floats by accuracy. A wrap for ROUND(float,float).'
 ;
+
+------ experimental:
+CREATE or replace FUNCTION array_rebuild_add_prefix(
+  prefix text,
+  a text[],
+  sep text default '#'
+) RETURNS text[] as $f$
+  SELECT array_agg(px)
+  FROM (
+    SELECT prefix||sep||x as px
+    FROM unnest(a) t(x) ORDER BY x
+  ) t 
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION array_rebuild_add_prefix
+  IS 'Rebuild array by adding a prefix in all items.'
+;
+
