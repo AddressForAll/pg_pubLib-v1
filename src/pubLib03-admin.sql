@@ -246,7 +246,7 @@ COMMENT ON FUNCTION doc_UDF_transparent_id(text,text[],int)
 ;
 -- SELECT doc_UDF_transparent_id('doc_UDF_show','{text,text,text,oid}');
 
-DROP FUNCTION doc_UDF_show_simple;
+-- DROP FUNCTION doc_UDF_show_simple;
 CREATE or replace FUNCTION doc_UDF_show_simple(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT '',
