@@ -267,6 +267,42 @@ CREATE or replace FUNCTION array_distinct_sort (
  ) t(x)
 $f$ language SQL strict IMMUTABLE;
 
+-----
+-- also trim, left, upper, etc. 
+CREATE or replace FUNCTION array_text_to_right(
+  p_in  text[],           -- the input texts
+  p_num int  DEFAULT 1    -- number of chars from right
+) RETURNS text[] AS $f$
+   SELECT array_agg(x ORDER BY x) 
+   FROM ( select RIGHT(unnest(p_in),p_num) ) t(x)
+$f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION array_text_to_right(text[],int)
+  IS 'Cut all strings using RIGHT.'
+;
+
+CREATE or replace FUNCTION array_text_to_distright(
+  p_in  text[],           -- the input texts
+  p_num int  DEFAULT 1    -- number of chars from right
+) RETURNS text[] AS $f$
+   SELECT array_agg(DISTINCT x ORDER BY x) 
+   FROM ( select RIGHT(unnest(p_in),p_num) ) t(x)
+$f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION array_text_to_distright(text[],int)
+  IS 'Cut all strings using RIGHT, filtering DISTINCT.'
+;
+
+CREATE or replace FUNCTION array_text_to_left(
+  p_in  text[],           -- the input texts
+  p_num int  DEFAULT 1    -- number of chars from left
+) RETURNS text[] AS $f$
+   SELECT array_agg(x ORDER BY x) 
+   FROM ( select LEFT(unnest(p_in),p_num) ) t(x)
+$f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION array_text_to_left(text[],int)
+  IS 'Cut all strings using LEFT.'
+;
+
+----
 
 CREATE or replace FUNCTION ROUND(
   input    float[],    -- the input numbers
