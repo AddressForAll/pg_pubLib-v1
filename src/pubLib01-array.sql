@@ -302,6 +302,16 @@ COMMENT ON FUNCTION array_text_to_left(text[],int)
   IS 'Cut all strings using LEFT.'
 ;
 
+CREATE or replace FUNCTION array_text_to_distleft(
+  p_in  text[],           -- the input texts
+  p_num int  DEFAULT 1    -- number of chars from left
+) RETURNS text[] AS $f$
+   SELECT array_agg(DISTINCT x ORDER BY x) 
+   FROM ( select LEFT(unnest(p_in),p_num) ) t(x)
+$f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION array_text_to_distleft(text[],int)
+  IS 'Cut all strings using LEFT, filtering DISTINCT.'
+;
 ----
 
 CREATE or replace FUNCTION ROUND(
