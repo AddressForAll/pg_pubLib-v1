@@ -134,9 +134,13 @@ $f$ language SQL IMMUTABLE;
 ----
 
 CREATE or replace FUNCTION bit_MSB(x bigint) RETURNS int AS $f$
-  SELECT (floor( log(2,x::numeric) ) +1)::int -- most significant bit position
   -- Must be optimized in C, see e.g. https://stackoverflow.com/a/673781/287948
+  SELECT CASE 
+        WHEN x IS NULL OR x<0 THEN NULL 
+        WHEN x =0 THEN 0 
+        ELSE (floor( log(2,x::numeric) ) +1)::int
+        END 
 $f$ language SQL IMMUTABLE;
-COMMENT ON FUNCTION bit_MSB(int)
+COMMENT ON FUNCTION bit_MSB(bigint)
   IS 'Must Significant Bit position, the length in a varbit representation.'
 ;
