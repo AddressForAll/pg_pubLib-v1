@@ -66,3 +66,12 @@ $$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION lexname_to_unix(text)
   IS 'Convert URN LEX jurisdiction string to camel-case filename for Unix-like file systems.'
 ;
+
+CREATE or replace FUNCTION substring_occurs(p_main text, p_sub text) RETURNS int AS $$
+  SELECT ( CHAR_LENGTH(p_main) - CHAR_LENGTH(REPLACE(p_main,p_sub,'')) )  / CHAR_LENGTH(p_sub);
+  -- see https://stackoverflow.com/a/36376548/287948
+$$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION substring_occurs(text,text)
+  IS 'Counts the number of occurences of a substring.'
+;
+
