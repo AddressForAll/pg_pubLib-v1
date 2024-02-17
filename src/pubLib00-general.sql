@@ -110,7 +110,7 @@ CREATE or replace FUNCTION trunc(
              ) AS s2
       FROM (
         SELECT *,
-             (floor( log(2,s2::numeric) ) +1)::int AS bin_bits, -- most significant bit position
+             (floor( log(2,s2::numeric) ) +1)::int AS bin_bits, -- most significant bit position, bitwise_MSB()
              CASE WHEN xtype='hex' THEN xdigits*4 ELSE xdigits END AS xd
         FROM (
           SELECT s[1] AS s1, s[2] AS s2, length(s[2]) AS l2
@@ -130,3 +130,13 @@ $f$ language SQL IMMUTABLE;
 -- SELECT round(2.8+1/3.,'bin',1);  -- 3.1125899906842625
 -- SELECT round(2.8+1/3.,'bin',6);  -- 3.1301821767286784
 -- SELECT round(2.8+1/3.,'bin',12); -- 3.13331578486784
+
+----
+
+CREATE or replace FUNCTION bit_MSB(x bigint) RETURNS int AS $f$
+  SELECT (floor( log(2,x::numeric) ) +1)::int -- most significant bit position
+  -- Must be optimized in C, see e.g. https://stackoverflow.com/a/673781/287948
+$f$ language SQL IMMUTABLE;
+COMMENT ON FUNCTION bit_MSB(int)
+  IS 'Must Significant Bit position, the length in a varbit representation.'
+;
