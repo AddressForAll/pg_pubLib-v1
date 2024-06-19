@@ -6,6 +6,54 @@
 CREATE extension IF NOT EXISTS postgis;
 
 -- -- -- -- -- -- -- -- -- --
+-- -- -- Transform and simplify functions:
+
+-- https://github.com/osm-codes/WS/issues/11
+CREATE or replace FUNCTION ST_CharactDiam(g geometry) RETURNS float
+AS $f$
+  SELECT CASE
+      WHEN tp IS NULL OR tp IN ('POINT','MULTIPOINT') THEN 0.0  -- or use convexHull for MULTIPOINT
+      WHEN is_poly AND poly_p<2*poly_a THEN (poly_a+poly_p)/2.0 -- normal perimeter
+      WHEN is_poly THEN (2*poly_a+SQRT(poly_p))/3.0  -- fractal perimeter
+      ELSE ST_Length(g)/2.0  -- or use buffer or convexHull
+    END
+  FROM (
+    SELECT tp, is_poly,
+           CASE WHEN is_poly THEN SQRT(ST_Area(g)) ELSE 0 END AS poly_a,
+           CASE WHEN is_poly THEN ST_Perimeter(g)/3.5 ELSE 0 END AS poly_p
+    FROM (SELECT GeometryType(g)) t(tp),
+         LATERAL (SELECT CASE WHEN tp IN ('POLYGON','MULTIPOLYGON') THEN true ELSE false END) t2(is_poly)
+  ) t3
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION ST_CharactDiam
+  IS 'Characteristic-diameter (zero for point or null geometry). A reference for ST_Segmentize, etc. for complex geometries as countries. Not depends on SRID.'
+;
+-- test with countries:
+-- select isolabel_ext, st_srid(geom) as srid, round(ST_CharactDiam(geom),3) as size_latlon FROM  optim.jurisdiction_geom where isolabel_ext ~ '^..$' order by 3 desc,1;
+
+CREATE or replace FUNCTION ST_Transform_resilient(
+    g geometry,
+    srid integer,
+    size_fraction float DEFAULT 0.05
+) RETURNS geometry AS $f$
+  -- discuss ideal at https://gis.stackexchange.com/q/444441/7505
+  SELECT CASE
+    WHEN size>0.0 THEN  ST_Transform(  ST_Segmentize(g,size)  , srid  )
+    ELSE  ST_Transform(g,srid)
+    END
+  FROM (
+    SELECT CASE
+         WHEN size_fraction IS NULL THEN 0.0
+         WHEN size_fraction<0 THEN -size_fraction
+         ELSE ST_CharactDiam(g) * size_fraction
+         END
+  ) t1(size)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION ST_Transform_resilient
+  IS 'Computes ST_Transform with previous ST_Segmentize when is not a point and size_fraction is not null. Negative size_fraction is used as characteristic-diameter avoiding CPU cost.'
+;
+
+-- -- -- -- -- -- -- -- -- --
 -- -- -- URI Functions:
 
 CREATE or replace FUNCTION str_url_todomain(
