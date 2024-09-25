@@ -9,6 +9,7 @@ CREATE extension IF NOT EXISTS postgis;
 -- -- -- Transform and simplify functions:
 
 -- https://github.com/osm-codes/WS/issues/11
+-- https://gis.stackexchange.com/questions/444441/how-to-reduce-the-clothesline-effect-in-st-transform
 CREATE FUNCTION ST_CharactDiam(
   g geometry
 ) RETURNS float AS $f$
