@@ -9,20 +9,30 @@ CREATE extension IF NOT EXISTS postgis;
 -- -- -- Transform and simplify functions:
 
 -- https://github.com/osm-codes/WS/issues/11
-CREATE or replace FUNCTION ST_CharactDiam(g geometry) RETURNS float
-AS $f$
-  SELECT CASE
-      WHEN tp IS NULL OR tp IN ('POINT','MULTIPOINT') THEN 0.0  -- or use convexHull for MULTIPOINT
+CREATE FUNCTION ST_CharactDiam(
+  g geometry
+) RETURNS float AS $f$
+  SELECT
+    CASE
+      WHEN tp IS NULL OR tp IN ('POINT','MULTIPOINT') THEN 0.0
       WHEN is_poly AND poly_p<2*poly_a THEN (poly_a+poly_p)/2.0 -- normal perimeter
       WHEN is_poly THEN (2*poly_a+SQRT(poly_p))/3.0  -- fractal perimeter
-      ELSE ST_Length(g)/2.0  -- or use buffer or convexHull
+      ELSE ST_Length(g)/2.0  -- or use buffer
     END
-  FROM (
+  FROM
+  (
     SELECT tp, is_poly,
-           CASE WHEN is_poly THEN SQRT(ST_Area(g)) ELSE 0 END AS poly_a,
-           CASE WHEN is_poly THEN ST_Perimeter(g)/3.5 ELSE 0 END AS poly_p
-    FROM (SELECT GeometryType(g)) t(tp),
-         LATERAL (SELECT CASE WHEN tp IN ('POLYGON','MULTIPOLYGON') THEN true ELSE false END) t2(is_poly)
+          CASE WHEN is_poly THEN SQRT(ST_Area(g)) ELSE 0 END AS poly_a,
+          CASE WHEN is_poly THEN ST_Perimeter(g)/3.5 ELSE 0 END AS poly_p
+    FROM
+    (
+       SELECT tp,
+        CASE
+          WHEN tp IN ('POLYGON','MULTIPOLYGON') THEN true
+          ELSE false
+        END is_poly
+       FROM (SELECT GeometryType(g)) t1(tp)
+    ) t2
   ) t3
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION ST_CharactDiam
@@ -31,26 +41,35 @@ COMMENT ON FUNCTION ST_CharactDiam
 -- test with countries:
 -- select isolabel_ext, st_srid(geom) as srid, round(ST_CharactDiam(geom),3) as size_latlon FROM  optim.jurisdiction_geom where isolabel_ext ~ '^..$' order by 3 desc,1;
 
-CREATE or replace FUNCTION ST_Transform_resilient(
-    g geometry,
-    srid integer,
-    size_fraction float DEFAULT 0.05
+CREATE FUNCTION ST_Transform_Resilient(
+  g    geometry,     -- the input geometry
+  srid integer,      -- target SRID, to transform g
+  size_fraction float DEFAULT 0.05,  -- 1/density.
+   -- Density of points per charactDiam (or negative for absolute fraction).
+  tolerance     float DEFAULT 0      -- E.g. on srid=4326 use 0.00000005.
+   -- ZERO=0.000000001. Good from 0.000000005 to 0.00000002.
 ) RETURNS geometry AS $f$
-  -- discuss ideal at https://gis.stackexchange.com/q/444441/7505
+ SELECT CASE
+      WHEN COALESCE(size_fraction,0.0)>0.0 AND COALESCE(tolerance,0)>0 THEN
+           ST_SimplifyPreserveTopology(geom,tolerance) -- ST_Simplify enough for grid
+      ELSE geom
+      END
+ FROM (
   SELECT CASE
     WHEN size>0.0 THEN  ST_Transform(  ST_Segmentize(g,size)  , srid  )
     ELSE  ST_Transform(g,srid)
-    END
+    END geom, size
   FROM (
     SELECT CASE
          WHEN size_fraction IS NULL THEN 0.0
-         WHEN size_fraction<0 THEN -size_fraction
-         ELSE ST_CharactDiam(g) * size_fraction
+         WHEN size_fraction<0       THEN -size_fraction
+         ELSE         ST_CharactDiam(g) * size_fraction
          END
   ) t1(size)
+ ) t2
 $f$ LANGUAGE SQL IMMUTABLE;
-COMMENT ON FUNCTION ST_Transform_resilient
-  IS 'Computes ST_Transform with previous ST_Segmentize when is not a point and size_fraction is not null. Negative size_fraction is used as characteristic-diameter avoiding CPU cost.'
+COMMENT ON FUNCTION ST_Transform_Resilient IS
+  'See problem/solution discussed at https://gis.stackexchange.com/q/444441'
 ;
 
 -- -- -- -- -- -- -- -- -- --
