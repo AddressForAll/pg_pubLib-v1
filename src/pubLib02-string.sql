@@ -50,7 +50,6 @@ $f$ LANGUAGE SQL IMMUTABLE;
 -- SELECT abbrevx, name, str_abbrev_minscore(abbrevx,name,lexlabel) as score FROM vw_jurabbrev;
 -- SELECT parent_abbrev, abbrev, name, str_abbrev_minscore(abbrev,name,lexlabel) as score FROM jurabbrev_aux order by 4 desc, 1,2;
 
-
 CREATE or replace FUNCTION str_urldecode(p text) RETURNS text AS $f$
  SELECT convert_from(CAST(E'\\x' || string_agg(
     CASE WHEN length(r.m[1]) = 1 THEN encode(convert_to(r.m[1], 'SQL_ASCII'), 'hex')
@@ -74,4 +73,44 @@ $$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION substring_occurs(text,text)
   IS 'Counts the number of occurences of a substring.'
 ;
+
+----------------
+--- REPORTS: ---
+
+CREATE or replace FUNCTION treport_to_json_rows(treport_name text, p_safe_limit int default 1000)
+RETURNS  TABLE(j json, idx int) as $f$
+   -- Note: JSONB not good because losts column-order
+ DECLARE
+    query text;
+ BEGIN
+    query := format(
+      'SELECT to_json(t) j, (ROW_NUMBER () OVER())::int idx FROM %s t LIMIT %s',
+      treport_name,
+      p_safe_limit
+    );
+    RETURN QUERY EXECUTE query; 
+ END;
+$f$ LANGUAGE PLpgSQL;
+
+CREATE or replace FUNCTION treport_aswikitext(
+  treport_name text,
+  p_caption text DEFAULT '',
+  p_safe_limit int DEFAULT 1000
+) RETURNS text as $f$
+ WITH r AS ( SELECT * FROM treport_to_json_rows($1,p_safe_limit) )
+ ,h AS ( SELECT json_object_keys(j) k FROM (select j from r limit 1) t  )
+ ,v AS ( SELECT idx,  (json_each_text(j)).value as txt FROM  r )
+ SELECT string_agg(x,'') FROM (
+   SELECT E'{| class="wikitable"' as x
+   UNION ALL
+   SELECT E'\n|+' as x WHERE p_caption>''
+   UNION ALL
+   SELECT format(E'\n|-\n!%s', string_agg(k,'!!')) FROM h
+   UNION ALL
+   SELECT E'\n|-\n|'|| string_agg(txt,'||' order by idx) FROM v group by idx
+   UNION ALL
+   SELECT E'\n|}'
+ )
+$f$ LANGUAGE SQL IMMUTABLE;
+-- select volat_file_write( '/tmp/my_report_1_2.txt', (select * from treport_aswikitext('prod.vw_tmp_r1_2')) );
 
