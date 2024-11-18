@@ -110,7 +110,7 @@ CREATE or replace FUNCTION treport_aswikitext(
    SELECT E'\n|-\n|'|| string_agg(txt,'||' order by idx) FROM v group by idx
    UNION ALL
    SELECT E'\n|}'
- )
+ ) s
 $f$ LANGUAGE SQL IMMUTABLE;
 -- select volat_file_write( '/tmp/my_report_1_2.txt', (select * from treport_aswikitext('prod.vw_tmp_r1_2')) );
 
