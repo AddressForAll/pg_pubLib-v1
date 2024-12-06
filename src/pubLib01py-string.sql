@@ -54,7 +54,7 @@ CREATE or replace FUNCTION jsonb_mustache_render(
   j = json.loads(i)
   return chevron.render(tpl,j,partials_path)
 $f$ LANGUAGE plpython3u IMMUTABLE;
--- SELECT ingest.mustache_render('Hello, {{ mustache }}!', '{"mustache":"World"}'::jsonb);
+-- SELECT jsonb_mustache_render('Hello, {{ mustache }}!', '{"mustache":"World"}'::jsonb);
 
 ----
 
