@@ -324,6 +324,7 @@ COMMENT ON FUNCTION ROUND(float[],float)
   IS 'ROUND array of floats by accuracy. A wrap for ROUND(float,float).'
 ;
 
+------------------------------------------------------------
 ------ experimental:
 CREATE or replace FUNCTION array_rebuild_add_prefix(
   prefix text,
@@ -339,4 +340,13 @@ $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION array_rebuild_add_prefix
   IS 'Rebuild array by adding a prefix in all items.'
 ;
+
+-- conferir se já não registrou com outro nome ou na lib strings:
+CREATE or replace FUNCTION array_substr(text[],int,int) RETURNS text[] AS $f$
+  SELECT array_agg( substring(x,$2,$3) ) FROM unnest($1) t(x)
+$f$ language SQL IMMUTABLE;
+
+CREATE or replace FUNCTION array_substr(text[],int) RETURNS text[] AS $f$
+  SELECT array_agg( substring(x,$2) ) FROM unnest($1) t(x)
+$f$ language SQL IMMUTABLE;
 
