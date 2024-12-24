@@ -144,3 +144,28 @@ $f$ language SQL IMMUTABLE;
 COMMENT ON FUNCTION bit_MSB(bigint)
   IS 'Must Significant Bit position, the length in a varbit representation.'
 ;
+
+-----
+
+CREATE or replace FUNCTION dynamic_query(text) RETURNS SETOF RECORD AS
+$f$
+ BEGIN 
+    RETURN QUERY EXECUTE $1; 
+ END 
+$f$ language  PLpgSQL;
+COMMENT ON FUNCTION dynamic_query(text)
+  IS 'Executes dynamically the text as a SQL-query (DQL command).'
+;
+
+CREATE or replace FUNCTION dynamic_execute(text) RETURNS boolean AS
+$f$
+ BEGIN 
+    RAISE NOTICE '-- EXECUTing: %',$1; 
+    EXECUTE $1 ;  -- INTO ret; revisar para comando devolver ret booleano de sucesso
+    RETURN true;
+ END 
+$f$ language  PLpgSQL;
+COMMENT ON FUNCTION dynamic_execute(text)
+  IS 'Executes dynamically the text as a SQL DDL COMMAND, like CREATE TABLE.'
+;
+
