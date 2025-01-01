@@ -229,3 +229,39 @@ CREATE or replace FUNCTION utmgrid_from4326_coverlabels(
   ) t2
 $f$ LANGUAGE SQL IMMUTABLE;
 -- SELECT utmgrid_from4326_coverlabels(geom) FROM optim.jurisdiction_geom  where isolabel_ext='BR'
+
+-------------------------------------------------
+CREATE or replace FUNCTION ST_GenerateGridPoints(
+  g geometry, -- a geometry using SRID of equal-area projection
+  p_dist integer,  -- positive=distance between points;
+         -- negative= number of points per axis (some excluded by intersection)
+  p_x0 int default NULL,   -- (optional) grid origin X
+  p_y0 int default NULL,   -- (optional) grid origin Y
+  p_show_all boolean default false  -- to show all rectangular grid
+  -- see https://gis.stackexchange.com/a/489059/7505
+) RETURNS geometry AS $f$
+ SELECT ST_Collect(  ST_POINT(x, y, ST_SRID($1))  )
+ FROM (         --- Parameter calculation: ---
+   SELECT CASE 
+     WHEN p_dist>0 THEN p_dist 
+     WHEN p_dist<0 THEN LEAST(
+       ceiling(ST_XMAX($1)-ST_XMIN($1))::int / -p_dist,
+       ceiling(ST_YMAX($1)-ST_YMIN($1))::int / -p_dist
+     )
+     ELSE NULL
+     END,
+     CASE WHEN p_x0 is null THEN floor(ST_XMIN($1))::int ELSE p_x0 END,
+     CASE WHEN p_y0 is null THEN floor(ST_YMIN($1))::int ELSE p_y0 END
+  ) t(selected_dist, x0, y0),
+  generate_series(  --- X axis scan: ---
+    x0,
+    ceiling(ST_XMAX($1))::int,
+    selected_dist
+   ) AS x,
+   generate_series(  --- Y axis scan: ---
+     y0,
+     ceiling(ST_YMAX($1))::int,
+     selected_dist
+   ) AS y 
+ WHERE p_show_all OR st_intersects($1, ST_POINT(x, y, ST_SRID($1)))
+$f$ language SQL;
