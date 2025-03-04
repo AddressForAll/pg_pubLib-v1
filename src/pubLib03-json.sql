@@ -163,17 +163,26 @@ CREATE or replace FUNCTION jsonb_summable_merge(  jsonb[], jsonb[] ) RETURNS jso
 $f$ language SQL IMMUTABLE;
 */
 
+CREATE or replace FUNCTION jsonb_to_jsonlines(jsonb) RETURNS text AS $f$
+    SELECT string_agg( json_strip_nulls(x::json)::text, E'\n')
+    FROM  jsonb_array_elements($1) t(x)
+$f$ LANGUAGE SQL IMMUTABLE;
+COMMENT ON FUNCTION jsonb_to_jsonlines(jsonb)
+  IS 'Formats JSON as https://JSONlines.org streaming standard'
+;    -- select jsonb_to_jsonlines('[{"a":1,"bla":"bla\"\\n bla"},{"x":2},true,{"y":12345}]');
+
 -----
 
 CREATE or replace FUNCTION jsonb_pretty(
   jsonb,            -- input
   compact boolean   -- true for compact format
 ) RETURNS text AS $f$
-  SELECT CASE
-    WHEN $2 THEN  ($1::json)::text
+  SELECT CASE -- warning: incidental behaviour of strip_nulls.
+    WHEN $2 THEN  json_strip_nulls($1::json)::text
     ELSE  jsonb_pretty($1)
   END
   -- from https://stackoverflow.com/a/27536804/287948
+  -- pg16+ back to https://stackoverflow.com/a/70828187/287948
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION jsonb_pretty(jsonb,boolean)
   IS 'Extends jsonb_pretty() to return canonical compact form when true';
@@ -205,6 +214,7 @@ CREATE or replace FUNCTION json_pretty_lines(j_input json, opt int DEFAULT 0) RE
 $f$ language SQL IMMUTABLE;
 COMMENT ON FUNCTION json_pretty_lines(json,int)
   IS 'Format JSON like jsonB_pretty() to return one item per line: 0 = to_text with no formating, 1=standard Pretty, 2=GeoJSON preserving type, 3=GeoJSON removing type, 4=compact form';
+
 
 ----
 
