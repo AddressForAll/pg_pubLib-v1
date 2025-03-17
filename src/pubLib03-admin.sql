@@ -275,3 +275,36 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
       INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid=u.oid::text
 $f$ LANGUAGE SQL IMMUTABLE;
 -- SELECT * FROM doc_UDF_show_simple('','%geohash%','st_%');
+
+-------
+
+CREATE or replace FUNCTION table_disk_usage(
+ p_schema_name text DEFAULT 'public', -- NULL is ALL; exact name.
+ p_name_like   text DEFAULT NULL -- NULL is ALL; used as '%name%'.
+) RETURNS TABLE (
+  schema_name text, relname text,
+  relkind char,
+  "size" text,
+  size_bytes bigint
+) AS $f$
+SELECT
+  schema_name, relname,relkind,
+  pg_size_pretty(table_size) AS size,
+  table_size as size_bytes
+FROM (
+       SELECT
+         pg_catalog.pg_namespace.nspname           AS schema_name,
+         relname,
+         pg_relation_size(pg_catalog.pg_class.oid) AS table_size,
+         relkind
+       FROM pg_catalog.pg_class
+         JOIN pg_catalog.pg_namespace ON relnamespace = pg_catalog.pg_namespace.oid
+       WHERE relkind IN ('r','i','t','m','f','p','I') -- exclude view and sequences
+     ) t
+WHERE (p_schema_name IS NULL OR schema_name=p_schema_name)
+      AND (p_name_like IS NULL OR relname LIKE ('%'||p_name_like||'%'))
+ORDER BY table_size DESC
+$f$ LANGUAGE SQL IMMUTABLE;
+-- SELECT * FROM table_disk_usage();
+-- SELECT * FROM table_disk_usage(null,'tmp') WHERE schema_name IN ('public','test');
+
