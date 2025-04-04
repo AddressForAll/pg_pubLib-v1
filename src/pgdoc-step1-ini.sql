@@ -36,6 +36,40 @@ CREATE TABLE pgdoc.selected_docs (
 
 
 -- -- -- -- -- --
+-- Generic functions:
+CREATE FUNCTION pgdoc.rel_description(
+     p_relname text,
+     p_schemaname text DEFAULT NULL
+) RETURNS text AS $f$
+    -- see https://stackoverflow.com/a/12736192/287948
+    SELECT obj_description((CASE 
+       WHEN strpos($1, '.')>0 THEN $1
+       WHEN $2 IS NULL THEN 'public.'||$1
+       ELSE $2||'.'||$1
+            END)::regclass, 'pg_class');
+$f$ LANGUAGE SQL;
+ 
+CREATE FUNCTION pgdoc.col_description(
+    p_relname text,  -- table name or schema.table 
+    p_colname text,  -- table's column name
+    p_database text DEFAULT NULL -- NULL for current
+) RETURNS text AS $f$
+    -- see https://stackoverflow.com/a/12736192/287948
+    WITH r AS (
+      SELECT CASE WHEN array_length(x,1)=1 THEN array['public',x[1]] ELSE x END
+      FROM regexp_split_to_array(p_relname,'\.') t(x)
+     ) 
+    SELECT col_description(p_relname::regClass, ordinal_position)
+    FROM r, information_schema.columns i
+    WHERE i.table_catalog = CASE WHEN $3 IS NULL THEN current_database() ELSE $3 END 
+      AND i.table_schema  = r.x[1]
+      AND i.table_name    = r.x[2]
+      AND i.column_name = p_colname
+$f$ LANGUAGE SQL;
+-- SELECT col_description('tableName','colName'); 
+-- SELECT col_description('schemaName.tableName','colName','databaseName); 
+
+-- -- -- -- -- --
 -- -- Functions
 
 CREATE or replace FUNCTION pgdoc.doc_UDF_show_simple_asJSONb(
