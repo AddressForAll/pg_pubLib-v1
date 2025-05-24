@@ -7,10 +7,10 @@ CREATE extension IF NOT EXISTS postgis;
 
 INSERT INTO spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) VALUES
    -- -- -- --
-(  -- IBGE Albers, SRID number convention in Project DigitalGuard-BR:
-  952019,
+(  -- IBGE Albers, official urn:ogc:def:crs:EPSG::10857
+  10857,
   'BR:IBGE',
-  52019,
+  10857,
   '+proj=aea +lat_0=-12 +lon_0=-54 +lat_1=-2 +lat_2=-22 +x_0=5000000 +y_0=10000000 +ellps=WGS84 +units=m +no_defs',
   $$PROJCS[
   "Conica_Equivalente_de_Albers_Brasil",
@@ -32,7 +32,7 @@ INSERT INTO spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) VALU
 ),
   -- -- -- --
 ( -- Grid of Colombia, IGAC MAGNA-SIRGAS / Origen-Nacional:
-  9377, -- official EPSG number
+  9377, -- official urn:ogc:def:crs:EPSG::9377
   'CO:IGAC',
   9377,
   '+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs',
