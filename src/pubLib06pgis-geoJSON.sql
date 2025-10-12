@@ -160,3 +160,55 @@ $f$;
 COMMENT ON FUNCTION write_geojsonb_Features
   IS 'run file_write() dynamically to save specified relation as GeoJSONb FeatureCollection.'
 ;
+
+--------------------------------------------
+
+CREATE or replace FUNCTION geojson_repretty(
+    j json,  -- from  jsonb_pretty() 
+    blocksize int DEFAULT 4   -- coordinates grouped in blocks
+) RETURNS text AS $f$
+ WITH pre AS (
+ SELECT t.id, substring(t.lin,3) as lin, CASE WHEN substring(t.lin,1,3)!='##[' THEN 0 ELSE 1+t.id%blocksize END as mod
+ FROM  regexp_split_to_table(
+           regexp_replace(
+                replace(j::text,'  ',' '),
+                '\s*\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\](,)?',
+                E'\n##[\\1,\\2]\\3',
+                'g'
+           ),
+       E'\n'
+       ) with ordinality t(lin,id)
+  )
+  
+  SELECT string_agg(sp||lin2,E'\n')
+  FROM (
+  SELECT id6, CASE WHEN mod=0 THEN '' ELSE '          ' END as sp,
+       string_agg(lin,' ') as lin2
+FROM ( -- tg
+SELECT *, CASE WHEN id5 is null THEN LAG(id5) over() else id5 END as id6
+FROM (
+SELECT *, CASE WHEN id4 is null THEN LAG(id4) over() else id4 END as id5
+FROM (
+SELECT *, CASE WHEN id3 is null THEN LAG(id3) over() else id3 END as id4
+FROM (
+SELECT *, CASE WHEN id2 is null THEN LAG(id2) over() else id2 END as id3
+FROM (
+SELECT *, CASE WHEN mod=0 THEN id WHEN open_id is null THEN LAG(open_id) over() else open_id END as id2
+FROM (
+SELECT *, CASE WHEN open_block THEN id else null END open_id, 
+       CASE WHEN close_block THEN id else null END close_id
+FROM (
+   select *, mod>LEAD(mod) over() AND mod!=0 as close_block,
+            (mod<LAG(mod) over() AND mod!=0) or (0=LAG(mod) over() AND mod>0) as open_block
+   from pre
+) t
+) t2
+) t3
+) t4
+) t5
+) t6
+) tg
+GROUP BY 1,2 ORDER BY 1 -- -- id6,sp,lin2
+) t7
+$f$ language SQL;
+-- select g.* from lixgeo t, LATERAL geojson_repretty(t.j) g;
