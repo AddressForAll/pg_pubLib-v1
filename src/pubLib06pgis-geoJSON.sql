@@ -162,16 +162,20 @@ COMMENT ON FUNCTION write_geojsonb_Features
 ;
 
 --------------------------------------------
+-- JSON formatters.
+-- see or merge with pubLib03-json.sql  for other "JSON pretty functions".
 
 CREATE or replace FUNCTION geojson_repretty(
-    j json,  -- from  jsonb_pretty() 
+    j text,  -- from  jsonb_pretty() 
     blocksize int DEFAULT 4   -- coordinates grouped in blocks
 ) RETURNS text AS $f$
  WITH pre AS (
- SELECT t.id, substring(t.lin,3) as lin, CASE WHEN substring(t.lin,1,3)!='##[' THEN 0 ELSE 1+t.id%blocksize END as mod
+ SELECT t.id,
+        CASE WHEN substring(t.lin,1,3)='##[' THEN substring(t.lin,3) ELSE  t.lin END AS lin,
+        CASE WHEN substring(t.lin,1,3)='##[' THEN 1+t.id%blocksize   ELSE 0 END AS mod
  FROM  regexp_split_to_table(
            regexp_replace(
-                replace(j::text,'  ',' '),
+                replace(j, '  ',' '),
                 '\s*\[\s*([\-\d\.]+)\s*,\s*([\-\d\.]+)\s*\](,)?',
                 E'\n##[\\1,\\2]\\3',
                 'g'
@@ -181,8 +185,8 @@ CREATE or replace FUNCTION geojson_repretty(
   )
   
   SELECT string_agg(sp||lin2,E'\n')
-  FROM (
-  SELECT id6, CASE WHEN mod=0 THEN '' ELSE '          ' END as sp,
+FROM (
+SELECT id6, CASE WHEN mod=0 THEN '' ELSE '          ' END as sp,
        string_agg(lin,' ') as lin2
 FROM ( -- tg
 SELECT *, CASE WHEN id5 is null THEN LAG(id5) over() else id5 END as id6
@@ -211,4 +215,24 @@ FROM (
 GROUP BY 1,2 ORDER BY 1 -- -- id6,sp,lin2
 ) t7
 $f$ language SQL;
+COMMENT ON FUNCTION geojson_repretty(text,int)
+  IS 'Alternative for jsonb_pretty() to return GeoJSON pretty and coordinates in compact form';
 -- select g.* from lixgeo t, LATERAL geojson_repretty(t.j) g;
+
+CREATE or replace FUNCTION geojson_repretty(
+    j json,  -- from  jsonb_pretty() 
+    blocksize int DEFAULT 4   -- coordinates grouped in blocks
+) RETURNS text AS $f$
+    SELECT geojson_repretty( $1::text, $2 );
+$f$ language SQL;
+COMMENT ON FUNCTION geojson_repretty(json,int)
+  IS 'Wrap for geojson_repretty()';
+
+CREATE or replace FUNCTION geojson_repretty(
+    j jsonB,  -- input
+    blocksize int DEFAULT 4   -- coordinates grouped in blocks
+) RETURNS text AS $wrap$
+    SELECT geojson_repretty( jsonb_pretty(j), blocksize );
+$wrap$ language SQL;
+COMMENT ON FUNCTION geojson_repretty(jsonB,int)
+  IS 'Wrap for geojson_repretty(geojson_repretty())';
