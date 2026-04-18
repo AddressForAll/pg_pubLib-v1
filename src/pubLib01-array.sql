@@ -248,6 +248,22 @@ BEGIN
 END;
 $f$ LANGUAGE 'plpgsql' IMMUTABLE;
 
+CREATE or replace FUNCTION array_distinct(
+  ANYARRAY,
+  p_no_null boolean DEFAULT true
+) RETURNS ANYARRAY AS $f$
+  SELECT CASE WHEN array_length(x,1) IS NULL THEN NULL ELSE x END
+  FROM (
+    SELECT ARRAY(
+        SELECT DISTINCT x
+        FROM unnest($1) t(x)
+        WHERE CASE
+          WHEN p_no_null  THEN  x IS NOT NULL
+          ELSE  true
+          END
+    )
+ ) t(x)
+$f$ language SQL strict IMMUTABLE;
 
 CREATE or replace FUNCTION array_distinct_sort (
   ANYARRAY,
