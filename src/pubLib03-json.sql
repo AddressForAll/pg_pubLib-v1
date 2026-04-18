@@ -28,10 +28,24 @@ COMMENT ON FUNCTION jsonb_objslice(text,jsonb,text)
   IS 'Get the first path-result as keyname-result object.'
 ;
 
-CREATE or replace FUNCTION jsonb_object_keys_asarray(j jsonb) RETURNS text[] AS $f$
-  SELECT  array_agg(x) FROM jsonb_object_keys(j) t(x)
-$f$ LANGUAGE sql IMMUTABLE;
+CREATE or replace FUNCTION jsonb_object_keys_asarray(_js jsonb)
+  RETURNS text[]
+  LANGUAGE sql IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT  array_agg(x) FROM jsonb_object_keys($1) t(x);
+END;
+COMMENT ON FUNCTION jsonb_object_keys_asarray(jsonb)
+  IS 'JSONB_keys-to-SQL_text_array optimized convertion.';
 
+CREATE or replace FUNCTION jsonb_array_to_text_array(_js jsonb, apply_sort boolean DEFAULT false)
+  RETURNS text[]
+  LANGUAGE sql IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT CASE WHEN $1 IS NULL THEN NULL WHEN apply_sort THEN array_distinct_sort(x) ELSE x END 
+  FROM (  SELECT CASE WHEN $1 IS NULL THEN NULL ELSE ARRAY(SELECT jsonb_array_elements_text($1)) END ) t(x);
+END;
+COMMENT ON FUNCTION jsonb_array_to_text_array(jsonb,boolean)
+  IS 'JSONB-to-SQL_text arrays optimized convertion, for pg14+. See https://dba.stackexchange.com/a/54289/90651';
 
 -- -- -- -- -- -- -- -- -- -- --
 -- Extends native functions:
