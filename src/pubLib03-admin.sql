@@ -111,8 +111,8 @@ CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] A
       ELSE sql_parse_selectcols_simple(p_as[1])
       END )
    FROM (
-     SELECT i,regexp_split_to_array(x, '\s+as\s+','i') p_as
-     FROM UNNEST($1) WITH ORDINALITY t1(x,i)
+    SELECT regexp_split_to_array(x, '\s+as\s+','i') p_as
+    FROM UNNEST($1) t1(x)
    ) t2
 $f$ LANGUAGE SQL;
 
@@ -158,16 +158,16 @@ CREATE or replace FUNCTION doc_UDF_show(
     LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
     LEFT JOIN pg_type on pg_type.oid = pg_proc.prorettype
   WHERE pg_namespace.nspname not in ('pg_catalog', 'information_schema')
-        AND CASE WHEN COALESCE(p_schema_name,'') >'' THEN p_schema_name=pg_namespace.nspname::text ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN
+        AND (COALESCE(p_schema_name,'') = '' OR p_schema_name=pg_namespace.nspname::text)
+        AND (COALESCE(p_name_like,'') = '' OR
               CASE WHEN position('%' in p_name_like)>0 THEN pg_proc.proname::text iLIKE p_name_like
               ELSE pg_proc.proname::text ~* p_name_like END
-            ELSE true END
-        AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN
+            )
+        AND (COALESCE(p_name_notlike,'') = '' OR
               CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(pg_proc.proname::text iLIKE p_name_notlike)
               ELSE NOT(pg_proc.proname::text ~* p_name_notlike) END
-            ELSE true END
-        AND CASE WHEN p_oid IS NOT NULL THEN pg_proc.oid=p_oid ELSE true END
+            )
+        AND (p_oid IS NULL OR pg_proc.oid=p_oid)
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION doc_UDF_show
   IS 'Show all information about an User Defined Function (UDF), by its OID, or listing all functions by LIKE filter.'
@@ -191,16 +191,16 @@ CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
   FROM information_schema.routines
     LEFT JOIN information_schema.parameters ON routines.specific_name=parameters.specific_name
   WHERE
-        CASE WHEN COALESCE(p_schema_name,'') >''   THEN p_schema_name=routines.specific_schema  ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN
+        (COALESCE(p_schema_name,'') = '' OR p_schema_name=routines.specific_schema)
+        AND (COALESCE(p_name_like,'') = '' OR
               CASE WHEN position('%' in p_name_like)>0 THEN
                    routines.routine_name::text iLIKE p_name_like
                    ELSE routines.routine_name::text ~* p_name_like END
-            ELSE true END
-        AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN 
+            )
+        AND (COALESCE(p_name_notlike,'') = '' OR 
               CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(routines.routine_name::text iLIKE p_name_notlike)
               ELSE NOT(routines.routine_name::text ~* p_name_notlike) END
-            ELSE true END
+            )
   GROUP BY routines.specific_name, 2, 3
   ORDER BY routines.routine_name, routines.specific_name
 $f$ LANGUAGE SQL IMMUTABLE;
@@ -272,7 +272,7 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
          u.arguments::text AS arguments,
          u.return_type, u.prokind, u.comment
   FROM doc_UDF_show_simplified_signature($1,$2,$3) s
-      INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid=u.oid::text
+        INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid::oid=u.oid
 $f$ LANGUAGE SQL IMMUTABLE;
 -- SELECT * FROM doc_UDF_show_simple('','%geohash%','st_%');
 
