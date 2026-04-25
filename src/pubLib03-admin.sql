@@ -111,8 +111,8 @@ CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] A
       ELSE sql_parse_selectcols_simple(p_as[1])
       END )
    FROM (
-     SELECT i,regexp_split_to_array(x, '\s+as\s+','i') p_as
-     FROM UNNEST($1) WITH ORDINALITY t1(x,i)
+    SELECT regexp_split_to_array(x, '\s+as\s+','i') p_as
+    FROM UNNEST($1) t1(x)
    ) t2
 $f$ LANGUAGE SQL;
 
@@ -158,16 +158,16 @@ CREATE or replace FUNCTION doc_UDF_show(
     LEFT JOIN pg_language on pg_proc.prolang = pg_language.oid
     LEFT JOIN pg_type on pg_type.oid = pg_proc.prorettype
   WHERE pg_namespace.nspname not in ('pg_catalog', 'information_schema')
-        AND CASE WHEN COALESCE(p_schema_name,'') >'' THEN p_schema_name=pg_namespace.nspname::text ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN
+        AND (COALESCE(p_schema_name,'') = '' OR p_schema_name=pg_namespace.nspname::text)
+        AND (COALESCE(p_name_like,'') = '' OR
               CASE WHEN position('%' in p_name_like)>0 THEN pg_proc.proname::text iLIKE p_name_like
               ELSE pg_proc.proname::text ~* p_name_like END
-            ELSE true END
-        AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN
+            )
+        AND (COALESCE(p_name_notlike,'') = '' OR
               CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(pg_proc.proname::text iLIKE p_name_notlike)
               ELSE NOT(pg_proc.proname::text ~* p_name_notlike) END
-            ELSE true END
-        AND CASE WHEN p_oid IS NOT NULL THEN pg_proc.oid=p_oid ELSE true END
+            )
+        AND (p_oid IS NULL OR pg_proc.oid=p_oid)
 $f$ LANGUAGE SQL IMMUTABLE;
 COMMENT ON FUNCTION doc_UDF_show
   IS 'Show all information about an User Defined Function (UDF), by its OID, or listing all functions by LIKE filter.'
@@ -191,16 +191,16 @@ CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
   FROM information_schema.routines
     LEFT JOIN information_schema.parameters ON routines.specific_name=parameters.specific_name
   WHERE
-        CASE WHEN COALESCE(p_schema_name,'') >''   THEN p_schema_name=routines.specific_schema  ELSE true END
-        AND CASE WHEN COALESCE(p_name_like,'') >'' THEN
+        (COALESCE(p_schema_name,'') = '' OR p_schema_name=routines.specific_schema)
+        AND (COALESCE(p_name_like,'') = '' OR
               CASE WHEN position('%' in p_name_like)>0 THEN
                    routines.routine_name::text iLIKE p_name_like
                    ELSE routines.routine_name::text ~* p_name_like END
-            ELSE true END
-        AND CASE WHEN COALESCE(p_name_notlike,'') >'' THEN 
+            )
+        AND (COALESCE(p_name_notlike,'') = '' OR 
               CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(routines.routine_name::text iLIKE p_name_notlike)
               ELSE NOT(routines.routine_name::text ~* p_name_notlike) END
-            ELSE true END
+            )
   GROUP BY routines.specific_name, 2, 3
   ORDER BY routines.routine_name, routines.specific_name
 $f$ LANGUAGE SQL IMMUTABLE;
@@ -272,7 +272,7 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
          u.arguments::text AS arguments,
          u.return_type, u.prokind, u.comment
   FROM doc_UDF_show_simplified_signature($1,$2,$3) s
-      INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid=u.oid::text
+        INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid::oid=u.oid
 $f$ LANGUAGE SQL IMMUTABLE;
 -- SELECT * FROM doc_UDF_show_simple('','%geohash%','st_%');
 
@@ -308,3 +308,80 @@ $f$ LANGUAGE SQL IMMUTABLE;
 -- SELECT * FROM table_disk_usage();
 -- SELECT * FROM table_disk_usage(null,'tmp') WHERE schema_name IN ('public','test');
 
+
+-- mediawiki documentation
+CREATE OR REPLACE FUNCTION doc_generate_mediawiki(p_name_like text) RETURNS text AS $f$
+  SELECT string_agg(
+    format(E'== %s ==\n* Descrição: %s\n* Retorno: \'\'%s\'\'\n* Assinatura: <nowiki>%s</nowiki>\n', 
+           name, comment, return_type, arguments), 
+    E'\n'
+  )
+  FROM doc_UDF_show_simple(NULL, p_name_like);
+$f$ LANGUAGE SQL;
+-- SELECT doc_generate_mediawiki('%geohash%');
+
+-- mediawiki documentation (tables, detailed)
+CREATE OR REPLACE FUNCTION doc_generate_mediawiki_tables_detailed(
+  p_schema_name text DEFAULT NULL,
+  p_table_like text DEFAULT NULL
+) RETURNS text AS $f$
+  SELECT string_agg(
+    format(
+      E'== %I.%I ==\n* Tipo: tabela\n* Descrição: %s\n* Colunas:\n%s\n',
+      t.table_schema,
+      t.table_name,
+      COALESCE(t.table_comment, '(sem comentário)'),
+      COALESCE(t.columns_block, E'** (sem colunas)')
+    ),
+    E'\n' ORDER BY t.table_schema, t.table_name
+  )
+  FROM (
+    SELECT
+      c.table_schema,
+      c.table_name,
+      obj_description(cls.oid, 'pg_class')::text AS table_comment,
+      string_agg(
+        format(
+          E'** %I %s%s%s -- %s',
+          c.column_name,
+          c.udt_name,
+          CASE WHEN c.is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END,
+          CASE WHEN c.column_default IS NOT NULL THEN ' DEFAULT ' || c.column_default ELSE '' END,
+          COALESCE(col_description(cls.oid, a.attnum), '(sem comentário)')
+        ),
+        E'\n' ORDER BY c.ordinal_position
+      ) AS columns_block
+    FROM information_schema.columns c
+    JOIN information_schema.tables tb
+      ON tb.table_schema = c.table_schema
+     AND tb.table_name = c.table_name
+     AND tb.table_type = 'BASE TABLE'
+    JOIN pg_catalog.pg_namespace ns
+      ON ns.nspname = c.table_schema
+    JOIN pg_catalog.pg_class cls
+      ON cls.relnamespace = ns.oid
+     AND cls.relname = c.table_name
+     AND cls.relkind IN ('r', 'p', 'f')
+    LEFT JOIN pg_catalog.pg_attribute a
+      ON a.attrelid = cls.oid
+     AND a.attname = c.column_name
+     AND a.attnum > 0
+     AND NOT a.attisdropped
+    WHERE
+      c.table_schema NOT IN ('pg_catalog', 'information_schema')
+      AND (p_schema_name IS NULL OR c.table_schema = p_schema_name)
+      AND (p_table_like IS NULL OR c.table_name ILIKE ('%' || p_table_like || '%'))
+    GROUP BY c.table_schema, c.table_name, cls.oid
+  ) t
+$f$ LANGUAGE SQL STABLE;
+COMMENT ON FUNCTION doc_generate_mediawiki_tables_detailed(text,text)
+  IS 'Generate detailed MediaWiki documentation for tables, including table comments and per-column comments.'
+;
+--All tables for all schemas from the user
+--SELECT doc_generate_mediawiki_tables_detailed(NULL, NULL);
+
+--Only public schema:
+--SELECT doc_generate_mediawiki_tables_detailed('public', NULL);
+
+--Filtering tables by name fragment:
+--SELECT doc_generate_mediawiki_tables_detailed('public', 'log');
