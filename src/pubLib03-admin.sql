@@ -310,15 +310,19 @@ $f$ LANGUAGE SQL IMMUTABLE;
 
 
 -- mediawiki documentation
-CREATE OR REPLACE FUNCTION doc_generate_mediawiki(p_name_like text) RETURNS text AS $f$
+CREATE OR REPLACE FUNCTION doc_generate_mediawiki(
+  p_schema_name text DEFAULT NULL,
+  p_name_like text DEFAULT NULL
+) RETURNS text AS $f$
   SELECT string_agg(
     format(E'== %s ==\n* Descrição: %s\n* Retorno: \'\'%s\'\'\n* Assinatura: <nowiki>%s</nowiki>\n', 
            name, comment, return_type, arguments), 
     E'\n'
   )
-  FROM doc_UDF_show_simple(NULL, p_name_like);
+  FROM doc_UDF_show_simple(p_schema_name, p_name_like);
 $f$ LANGUAGE SQL;
--- SELECT doc_generate_mediawiki('%geohash%');
+-- SELECT doc_generate_mediawiki('public', '%geohash%');
+-- SELECT doc_generate_mediawiki(NULL, '%geohash%');
 
 -- mediawiki documentation (tables, detailed)
 CREATE OR REPLACE FUNCTION doc_generate_mediawiki_tables_detailed(
