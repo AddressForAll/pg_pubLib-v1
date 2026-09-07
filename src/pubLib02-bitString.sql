@@ -6,9 +6,9 @@
 -- pure varbit/natural code functions:
 
 CREATE or replace FUNCTION varbit_generate_tree(
-  p_max_level int default 4
-) RETURNS table (bitstring varbit, level smallint)
-LANGUAGE SQL IMMUTABLE
+  p_max_level smallint default 4
+) RETURNS TABLE (bitstring varbit, level smallint)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
 BEGIN ATOMIC
   WITH RECURSIVE binary_tree AS (
     SELECT 
@@ -26,7 +26,30 @@ BEGIN ATOMIC
   )
   SELECT bitstring, level FROM binary_tree;
 END;
+COMMENT ON FUNCTION varbit_generate_tree(smallint)
+ IS 'Generates all bit strings into a table, from length zero to p_max_level. It can be used as binary tree node-labels.'
+;
 
+CREATE or replace FUNCTION varbit_generate_tree_agg(
+  p_max_level int default 4
+) RETURNS  varbit[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  WITH RECURSIVE binary_tree AS (
+    SELECT ''::varbit AS bitstring
+    UNION ALL
+    SELECT a.bitstring || next.bit
+    FROM binary_tree a
+    CROSS JOIN (VALUES ('0'::varbit), ('1'::varbit)) AS next(bit)
+    WHERE bit_length(a.bitstring) < p_max_level
+  )
+  SELECT array_agg(bitstring ORDER BY 1) FROM binary_tree;
+END;
+COMMENT ON FUNCTION varbit_generate_tree_agg(int)
+ IS 'Generates all bit strings, aggregating it into an array, from length zero to p_max_level. It can be used as binary tree node-labels.'
+;
+
+ 
 ------------------------------------
 -- "UUID <--> BIT STRING" functions:
 
