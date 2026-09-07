@@ -2,6 +2,31 @@
 -- Bit String funcions. (vbit = VARBIT =  Bit Barying = Bit String). See https://www.postgresql.org/docs/current/datatype-bit.html
 --
 
+--------------------------------------
+-- pure varbit/natural code functions:
+
+CREATE or replace FUNCTION varbit_generate_tree(
+  p_max_level int default 4
+) RETURNS table (bitstring varbit, level smallint)
+LANGUAGE SQL IMMUTABLE
+BEGIN ATOMIC
+  WITH RECURSIVE binary_tree AS (
+    SELECT 
+        ''::varbit AS bitstring, 
+        0::smallint AS level
+    
+    UNION ALL
+    
+    SELECT 
+        a.bitstring || next.bit,
+        a.level + 1::smallint
+    FROM binary_tree a
+    CROSS JOIN (VALUES ('0'::varbit), ('1'::varbit)) AS next(bit)
+    WHERE a.level < p_max_level
+  )
+  SELECT bitstring, level FROM binary_tree;
+END;
+
 ------------------------------------
 -- "UUID <--> BIT STRING" functions:
 
