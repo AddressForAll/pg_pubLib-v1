@@ -2,38 +2,47 @@
  * PostgreSQL's Public schema, common Library (pubLib)
  * Module: array.
  *
+ * Install pubLib00-general-atomic.sql first: e.g. ROUND(float[],float) needs ROUND(float,float).
  * Complementing https://www.postgresql.org/docs/current/functions-array.html
+ * CREATE AGGREGATE decision: no COMBINEFUNC is added (no partial aggregation promised).
+ * Note. Generic comparison/sorting wrappers are UNSAFE for arbitrary user-defined types.
  */
 
-CREATE or replace FUNCTION pg_csv_head(filename text, separator text default ',', linesize bigint default 9000) RETURNS text[] AS $f$
+CREATE OR REPLACE FUNCTION pg_csv_head(filename text, separator text default ',', linesize bigint default 9000) RETURNS text[]
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
+
   SELECT regexp_split_to_array(replace(s,'"',''), separator)
   FROM regexp_split_to_table(  pg_read_file(filename,0,linesize,true),  E'\n') t(s)
-  LIMIT 1
-$f$ LANGUAGE SQL IMMUTABLE;
+  LIMIT 1;
+END;
 COMMENT ON FUNCTION pg_csv_head(text,text,bigint)
   IS 'Devolve array do header de um arquivo CSV com separador estrito, lendo apenas primeiros bytes.'
 ;
 
-CREATE or replace FUNCTION  pg_csv_head_tojsonb(
+CREATE OR REPLACE FUNCTION pg_csv_head_tojsonb(
   filename text, tolower boolean = false,
   separator text = ',', linesize bigint = 9000,
   is_idx_json boolean = true
-) RETURNS jsonb AS $f$
+) RETURNS jsonb
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
+
     SELECT  jsonb_object_agg(
       CASE WHEN tolower THEN lower(x) ELSE x END ,
       ordinality - CASE WHEN is_idx_json THEN 1 ELSE 0 END
     )
-    FROM unnest( pg_csv_head($1,$3,$4) ) WITH ORDINALITY x
-$f$ LANGUAGE SQL IMMUTABLE;
+    FROM unnest( pg_csv_head($1,$3,$4) ) WITH ORDINALITY x;
+END;
 -- exemplo, select x from pg_csv_head_tojsonb('/tmp/pg_io/ENDERECO.csv') t(x);
 
- ----
+----
 
 CREATE or replace FUNCTION array_last(
   p_input anyarray
 ) RETURNS anyelement AS $f$
   SELECT $1[array_upper($1,1)]
-$f$ LANGUAGE SQL IMMUTABLE;
+$f$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 
 CREATE or replace FUNCTION array_last_butnot(
   p_input anyarray,
@@ -45,28 +54,29 @@ CREATE or replace FUNCTION array_last_butnot(
      ELSE thelast
      END
   FROM (select x,$1[x] thelast FROM (select array_upper($1,1)) t(x)) t2
-$f$ LANGUAGE SQL IMMUTABLE;
+$f$ LANGUAGE SQL IMMUTABLE PARALLEL UNSAFE;
 
 CREATE or replace FUNCTION array_last_butnot(
   p_input anyarray,
   p_not anyelement
 ) RETURNS anyelement AS $wrap$
   SELECT array_last_butnot($1,array[$2])
-$wrap$ LANGUAGE SQL IMMUTABLE;
+$wrap$ LANGUAGE SQL IMMUTABLE PARALLEL UNSAFE;
 
 ----
 
-CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
-  SELECT array_agg(value::text::bigint) FROM jsonb_array_elements(p_j)
-$f$ LANGUAGE SQL IMMUTABLE;
+CREATE OR REPLACE FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
+  SELECT array_agg(value::text::bigint) FROM jsonb_array_elements(p_j);
+END;
 COMMENT ON FUNCTION jsonb_to_bigints(jsonb)
   IS 'Casts JSON array of non-floating numbers to SQL array of bigints.'
 ;
 -- select x, x+1, pg_typeof(x) from unnest(jsonb_to_bigints('[-1,0,1,2,9223372036854775806]'::jsonb)) t(x);
 
-CREATE or replace FUNCTION jsonb_to_bigints( p_j jsonb ) RETURNS bigint[] AS $f$
-  SELECT array_agg(value::text::bigint) FROM jsonb_array_elements($1)
-$f$ LANGUAGE SQL IMMUTABLE;
+-- Duplicate definition removed.
 
 
 CREATE or replace FUNCTION array_subtract(
@@ -77,7 +87,7 @@ CREATE or replace FUNCTION array_subtract(
   FROM (
     SELECT array(  SELECT unnest(p_a) EXCEPT SELECT unnest(p_b)  )
   ) t(x)
-$f$ language SQL IMMUTABLE;
+$f$ language SQL IMMUTABLE PARALLEL UNSAFE;
 
 CREATE or replace FUNCTION public.array_reduce_dim(anyarray)
 RETURNS SETOF anyarray AS $f$ -- see https://wiki.postgresql.org/wiki/Unnest_multidimensional_array
@@ -89,7 +99,7 @@ BEGIN
     END LOOP;
     RETURN;
 END;
-$f$ LANGUAGE plpgsql IMMUTABLE;
+$f$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE;
 
 
 CREATE or replace FUNCTION array_fillTo(
@@ -101,7 +111,7 @@ CREATE or replace FUNCTION array_fillTo(
        WHEN len<p_len THEN p_array || array_fill($3,array[$2-len])
        ELSE $1 END
    FROM ( SELECT COALESCE( array_length(p_array,1), 0) ) t(len)
-$f$ LANGUAGE SQL IMMUTABLE;
+$f$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 
 
 /**
@@ -113,7 +123,7 @@ CREATE or replace FUNCTION array_fillto_duo(
   SELECT CASE WHEN l1>=l2 THEN $1 ELSE array_fillto($1,l2,$3) END a,
    CASE WHEN l1<=l2 THEN $2 ELSE array_fillto($2,l1,$3) END b
   FROM (SELECT array_length($1,1) l1, array_length($2,1) l2) t
-$f$ language SQL IMMUTABLE;
+$f$ language SQL IMMUTABLE PARALLEL SAFE;
 
 
 CREATE or replace FUNCTION unnest_2d_1d(
@@ -126,7 +136,7 @@ CREATE or replace FUNCTION unnest_2d_1d(
        RETURN NEXT;
     END LOOP;
  END
-$func$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$func$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE or replace FUNCTION array_sample(
   p_items ANYARRAY,     -- the array to be random-sampled
@@ -137,14 +147,14 @@ CREATE or replace FUNCTION array_sample(
     SELECT x FROM unnest($1) t2(x)
     ORDER BY random() LIMIT $2
   ) t
-$f$ language SQL IMMUTABLE;
+$f$ language SQL VOLATILE PARALLEL RESTRICTED;
 
 CREATE or replace FUNCTION array_fastsort (
   -- for future when bigint use CREATE EXTENSION intarray; sort(x)
   ANYARRAY
 ) RETURNS ANYARRAY AS $f$
   SELECT ARRAY(SELECT unnest($1) ORDER BY 1)
-$f$ language SQL strict IMMUTABLE;
+$f$ language SQL strict IMMUTABLE PARALLEL UNSAFE;
 
 
 CREATE or replace FUNCTION array_is_allsame ( ANYARRAY ) RETURNS boolean AS $f$
@@ -157,7 +167,7 @@ CREATE or replace FUNCTION array_is_allsame ( ANYARRAY ) RETURNS boolean AS $f$
            )
            END
   FROM (SELECT array_length($1,1)) t2(l)
-$f$ language SQL strict IMMUTABLE;
+$f$ language SQL strict IMMUTABLE PARALLEL UNSAFE;
 
 
 CREATE or replace FUNCTION array_distinct_sort (
@@ -176,13 +186,13 @@ CREATE or replace FUNCTION array_distinct_sort (
         ORDER BY 1
    )
  ) t(x)
-$f$ language SQL strict IMMUTABLE;
+$f$ language SQL strict IMMUTABLE PARALLEL UNSAFE;
 
 CREATE or replace FUNCTION array_merge_sort(
   anycompatiblearray, anycompatiblearray, boolean DEFAULT true
 ) RETURNS anycompatiblearray AS $wrap$
   SELECT array_distinct_sort(array_cat($1,$2),$3)
-$wrap$ language SQL IMMUTABLE;
+$wrap$ language SQL IMMUTABLE PARALLEL UNSAFE;
 
 
 CREATE or replace FUNCTION array_cat_distinct(a anyarray, b anyarray) RETURNS anyarray AS $f$
@@ -191,14 +201,16 @@ CREATE or replace FUNCTION array_cat_distinct(a anyarray, b anyarray) RETURNS an
     FROM unnest(b) t(b_i)
     WHERE NOT( b_i=any(a) )
   ) END
-$f$  LANGUAGE SQL IMMUTABLE;
+$f$  LANGUAGE SQL IMMUTABLE PARALLEL UNSAFE;
 
 
 -- https://stackoverflow.com/a/46849678
 -- https://www.postgresql.org/docs/current/release-14.html
-CREATE AGGREGATE array_concat_agg(anycompatiblearray) (
+CREATE AGGREGATE array_cat_agg(anycompatiblearray) (
   SFUNC = array_cat,
-  STYPE = anycompatiblearray
+  STYPE = anycompatiblearray,
+  -- INITCOND = '{}',  nao desejado. Preferido retornar null para argumento null
+  PARALLEL = SAFE
 );
 
 -----------
@@ -246,7 +258,7 @@ BEGIN
   END LOOP;
   RETURN ret;
 END;
-$f$ LANGUAGE 'plpgsql' IMMUTABLE;
+$f$ LANGUAGE 'plpgsql' IMMUTABLE PARALLEL SAFE;
 
 CREATE or replace FUNCTION array_distinct(
   ANYARRAY,
@@ -263,106 +275,114 @@ CREATE or replace FUNCTION array_distinct(
           END
     )
  ) t(x)
-$f$ language SQL strict IMMUTABLE;
+$f$ language SQL strict IMMUTABLE PARALLEL UNSAFE;
 
-CREATE or replace FUNCTION array_distinct_sort (
-  ANYARRAY,
-  p_no_null boolean DEFAULT true
-) RETURNS ANYARRAY AS $f$
-  SELECT CASE WHEN array_length(x,1) IS NULL THEN NULL ELSE x END -- same as  x='{}'::anyarray
-  FROM (
-  	SELECT ARRAY(
-        SELECT DISTINCT x
-        FROM unnest($1) t(x)
-        WHERE CASE
-          WHEN p_no_null  THEN  x IS NOT NULL
-          ELSE  true
-          END
-        ORDER BY 1
-   )
- ) t(x)
-$f$ language SQL strict IMMUTABLE;
+-- Duplicate definition removed.
 
 -----
 -- also trim, left, upper, etc. 
-CREATE or replace FUNCTION array_text_to_right(
+CREATE OR REPLACE FUNCTION array_text_to_right(
   p_in  text[],           -- the input texts
   p_num int  DEFAULT 1    -- number of chars from right
-) RETURNS text[] AS $f$
+) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
    SELECT array_agg(x ORDER BY x) 
-   FROM ( select RIGHT(unnest(p_in),p_num) ) t(x)
-$f$ language SQL IMMUTABLE;
+   FROM ( select RIGHT(unnest(p_in),p_num) ) t(x);
+END;
 COMMENT ON FUNCTION array_text_to_right(text[],int)
   IS 'Cut all strings using RIGHT.'
 ;
 
-CREATE or replace FUNCTION array_text_to_distright(
+CREATE OR REPLACE FUNCTION array_text_to_distright(
   p_in  text[],           -- the input texts
   p_num int  DEFAULT 1    -- number of chars from right
-) RETURNS text[] AS $f$
+) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
    SELECT array_agg(DISTINCT x ORDER BY x) 
-   FROM ( select RIGHT(unnest(p_in),p_num) ) t(x)
-$f$ language SQL IMMUTABLE;
+   FROM ( select RIGHT(unnest(p_in),p_num) ) t(x);
+END;
 COMMENT ON FUNCTION array_text_to_distright(text[],int)
   IS 'Cut all strings using RIGHT, filtering DISTINCT.'
 ;
 
-CREATE or replace FUNCTION array_text_to_left(
+CREATE OR REPLACE FUNCTION array_text_to_left(
   p_in  text[],           -- the input texts
   p_num int  DEFAULT 1    -- number of chars from left
-) RETURNS text[] AS $f$
+) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
    SELECT array_agg(x ORDER BY x) 
-   FROM ( select LEFT(unnest(p_in),p_num) ) t(x)
-$f$ language SQL IMMUTABLE;
+   FROM ( select LEFT(unnest(p_in),p_num) ) t(x);
+END;
 COMMENT ON FUNCTION array_text_to_left(text[],int)
   IS 'Cut all strings using LEFT.'
 ;
 
-CREATE or replace FUNCTION array_text_to_distleft(
+CREATE OR REPLACE FUNCTION array_text_to_distleft(
   p_in  text[],           -- the input texts
   p_num int  DEFAULT 1    -- number of chars from left
-) RETURNS text[] AS $f$
+) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
    SELECT array_agg(DISTINCT x ORDER BY x) 
-   FROM ( select LEFT(unnest(p_in),p_num) ) t(x)
-$f$ language SQL IMMUTABLE;
+   FROM ( select LEFT(unnest(p_in),p_num) ) t(x);
+END;
 COMMENT ON FUNCTION array_text_to_distleft(text[],int)
   IS 'Cut all strings using LEFT, filtering DISTINCT.'
 ;
 ----
 
-CREATE or replace FUNCTION ROUND(
+CREATE OR REPLACE FUNCTION ROUND(
   input    float[],    -- the input numbers
   accuracy float       -- uniform accuracy
-) RETURNS float[] AS $f$
-  SELECT array_agg(round(x,accuracy)) FROM unnest(input) t(x)
-$f$ language SQL IMMUTABLE;
+) RETURNS float[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
+  SELECT array_agg(round(x,accuracy)) FROM unnest(input) t(x);
+END;
 COMMENT ON FUNCTION ROUND(float[],float)
   IS 'ROUND array of floats by accuracy. A wrap for ROUND(float,float).'
 ;
 
 ------------------------------------------------------------
 ------ experimental:
-CREATE or replace FUNCTION array_rebuild_add_prefix(
+CREATE OR REPLACE FUNCTION array_rebuild_add_prefix(
   prefix text,
   a text[],
   sep text default '#'
-) RETURNS text[] as $f$
+) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
   SELECT array_agg(px)
   FROM (
     SELECT prefix||sep||x as px
     FROM unnest(a) t(x) ORDER BY x
-  ) t 
-$f$ LANGUAGE SQL IMMUTABLE;
+  ) t;
+END;
 COMMENT ON FUNCTION array_rebuild_add_prefix
   IS 'Rebuild array by adding a prefix in all items.'
 ;
 
 -- conferir se já não registrou com outro nome ou na lib strings:
-CREATE or replace FUNCTION array_substr(text[],int,int) RETURNS text[] AS $f$
-  SELECT array_agg( substring(x,$2,$3) ) FROM unnest($1) t(x)
-$f$ language SQL IMMUTABLE;
+CREATE OR REPLACE FUNCTION array_substr(text[],int,int) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
 
-CREATE or replace FUNCTION array_substr(text[],int) RETURNS text[] AS $f$
-  SELECT array_agg( substring(x,$2) ) FROM unnest($1) t(x)
-$f$ language SQL IMMUTABLE;
+  SELECT array_agg( substring(x,$2,$3) ) FROM unnest($1) t(x);
+END;
+
+CREATE OR REPLACE FUNCTION array_substr(text[],int) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+
+  SELECT array_agg( substring(x,$2) ) FROM unnest($1) t(x);
+END;
 

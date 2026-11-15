@@ -3,6 +3,10 @@
  * Module: general. (simple aliases and basic CAST functions)
  *
  * Complementing https://www.postgresql.org/docs/current/functions-array.html
+ * ATOMIC or not: 
+ *  functions iif() etc remains polymorphic SQL; dynamic_query/dynamic_execute remain PL/pgSQL.
+ * VOLATILITY: STABLE (e.g. round_minutes) depends on configurations; RESTRICTED on random().
+ * PARALLEL UNSAFE: dynamic-SQL functions.
  */
 
 -- -- -- -- -- -- -- -- -- -- --
@@ -15,7 +19,7 @@ CREATE or replace FUNCTION iIF(
     -- See https://stackoverflow.com/a/53750984/287948
 ) RETURNS anyelement AS $f$
   SELECT CASE WHEN condition THEN true_result ELSE false_result END
-$f$  LANGUAGE SQL IMMUTABLE;
+$f$  LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 COMMENT ON FUNCTION iif
   IS 'Immediate IF. Sintax sugar for the most frequent CASE-WHEN. Avoid with text, need explicit cast.'
 ;
@@ -24,20 +28,24 @@ COMMENT ON FUNCTION iif
 -- ROUND and TRUNC functions
 
 -- FLOAT:
-CREATE or replace FUNCTION ROUND(float,int) RETURNS NUMERIC AS $wrap$
-   SELECT ROUND($1::numeric,$2)
-$wrap$ language SQL IMMUTABLE;
+CREATE OR REPLACE FUNCTION ROUND(float,int) RETURNS NUMERIC
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+   SELECT ROUND($1::numeric,$2);
+END;
 COMMENT ON FUNCTION ROUND(float,int)
   IS 'Cast for ROUND(float,x). Useful for SUM, AVG, etc. See also https://stackoverflow.com/a/20934099/287948.'
 ;
 
-CREATE or replace FUNCTION ROUND(
+CREATE OR REPLACE FUNCTION ROUND(
   input    float,    -- the input number
   accuracy float     -- accuracy
-) RETURNS float AS $f$
-  SELECT (ROUND($1/accuracy)*accuracy)::numeric(99,9)::float
+) RETURNS float
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT (ROUND($1/accuracy)*accuracy)::numeric(99,9)::float;
   -- SELECT ROUND($1/accuracy)*accuracy
-$f$ language SQL IMMUTABLE;
+END;
 COMMENT ON FUNCTION ROUND(float,float)
   IS 'ROUND by accuracy. See Round9 at https://stackoverflow.com/a/20933882/287948'
 ;
@@ -48,53 +56,63 @@ COMMENT ON FUNCTION ROUND(float,float)
 -- SELECT round(pi(), 0.0001);    -- 3.1416
 
 -- TIME:
-CREATE or replace FUNCTION round_minutes(
+CREATE OR REPLACE FUNCTION round_minutes(
   input TIMESTAMP WITHOUT TIME ZONE,
   countUnit_minutes integer   -- count unit
-) RETURNS TIMESTAMP WITHOUT TIME ZONE AS $f$
+) RETURNS TIMESTAMP WITHOUT TIME ZONE
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT
      date_trunc('hour', $1)
      +  cast((countUnit_minutes::varchar||' min') as interval)
      * round(
        (date_part('minute',$1)::float + date_part('second',$1)/ 60.)::float
        / countUnit_minutes::float
-     )
-$f$ LANGUAGE SQL IMMUTABLE;
+     );
+END;
 -- SELECT round_minutes('2010-09-17 16:23:12', 5);
 
-CREATE or replace FUNCTION round_minutes(
+CREATE OR REPLACE FUNCTION round_minutes(
   input TIMESTAMP WITHOUT TIME ZONE,
   countUnit_minutes integer,   -- count unit
   str_format text              -- to_chat() standard
-) RETURNS text AS $f$
-  SELECT to_char( round_minutes($1,countUnit_minutes), str_format)
-$f$ LANGUAGE SQL IMMUTABLE;
+) RETURNS text
+LANGUAGE SQL STABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT to_char( round_minutes($1,countUnit_minutes), str_format);
+END;
 -- SELECT round_minutes('2010-09-17 16:23:12', 10, 'HH24:MI');
 
-CREATE or replace FUNCTION trunc_bin(x bigint, bits int) RETURNS bigint AS $f$
+CREATE OR REPLACE FUNCTION trunc_bin(x bigint, bits int) RETURNS bigint
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
     SELECT ((x::bit(64) >> bits) << bits)::bigint;
-$f$ language SQL IMMUTABLE;
+END;
 
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- EXPERIMENTS (functions under test or construction)
 
-CREATE or replace FUNCTION decimal_zeros(
+CREATE OR REPLACE FUNCTION decimal_zeros(
   x float,                   -- input
   d_correction int DEFAULT 1 -- correction on the number of digits
-) RETURNS int AS $f$
+) RETURNS int
+LANGUAGE SQL STABLE PARALLEL SAFE
+BEGIN ATOMIC
     SELECT CASE WHEN d<0 THEN 0 ELSE d END
     FROM (
       SELECT length(s) - length( regexp_replace(s,'\.0+','') ) - d_correction AS d
       FROM (SELECT x::text) t1(s)
-    ) t2
-$f$ language SQL IMMUTABLE;
+    ) t2;
+END;
 
-CREATE or replace FUNCTION trunc(
+CREATE OR REPLACE FUNCTION trunc(
    x float,
    xtype text,  -- 'bin', 'dec' or 'hex'
    xdigits int DEFAULT 0
-) RETURNS float AS $f$
+) RETURNS float
+LANGUAGE SQL STABLE PARALLEL SAFE
+BEGIN ATOMIC
     SELECT CASE
        WHEN xtype NOT IN ('dec','bin','hex') THEN 'NaN'::float
        WHEN xdigits=0 THEN trunc(x)
@@ -117,8 +135,8 @@ CREATE or replace FUNCTION trunc(
           FROM (SELECT regexp_split_to_array(x::text,'\.')) t1a(s)
         ) t1b
       ) t1c
-    ) t2
-$f$ language SQL IMMUTABLE;
+    ) t2;
+END;
 -- SELECT round(1/3.,'dec',4);     -- 0.3333 float!
 -- SELECT round(2.8+1/3.,'dec',1); -- 3.1 float!
 -- SELECT round(2.8+1/3.,'dec');   -- ERROR, need to cast string
@@ -133,14 +151,16 @@ $f$ language SQL IMMUTABLE;
 
 ----
 
-CREATE or replace FUNCTION bit_MSB(x bigint) RETURNS int AS $f$
+CREATE OR REPLACE FUNCTION bit_MSB(x bigint) RETURNS int
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   -- Must be optimized in C, see e.g. https://stackoverflow.com/a/673781/287948
   SELECT CASE 
         WHEN x IS NULL OR x<0 THEN NULL 
         WHEN x =0 THEN 0 
         ELSE (floor( log(2,x::numeric) ) +1)::int
-        END 
-$f$ language SQL IMMUTABLE;
+        END;
+END;
 COMMENT ON FUNCTION bit_MSB(bigint)
   IS 'Must Significant Bit position, the length in a varbit representation.'
 ;
@@ -152,7 +172,7 @@ $f$
  BEGIN 
     RETURN QUERY EXECUTE $1; 
  END 
-$f$ language  PLpgSQL;
+$f$ language  PLpgSQL PARALLEL UNSAFE;
 COMMENT ON FUNCTION dynamic_query(text)
   IS 'Executes dynamically the text as a SQL-query (DQL command).'
 ;
@@ -164,7 +184,7 @@ $f$
     EXECUTE $1 ;  -- INTO ret; revisar para comando devolver ret booleano de sucesso
     RETURN true;
  END 
-$f$ language  PLpgSQL;
+$f$ language  PLpgSQL PARALLEL UNSAFE;
 COMMENT ON FUNCTION dynamic_execute(text)
   IS 'Executes dynamically the text as a SQL DDL COMMAND, like CREATE TABLE.'
 ;
