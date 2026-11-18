@@ -2,7 +2,7 @@
  * PostgreSQL's Public schema, common Library (pubLib)
  * Module: array.
  *
- * Install pubLib00-general-atomic.sql first: e.g. ROUND(float[],float) needs ROUND(float,float).
+ * Install pubLib00-general.sql first: e.g. ROUND(float[],float) needs ROUND(float,float).
  * Complementing https://www.postgresql.org/docs/current/functions-array.html
  * CREATE AGGREGATE decision: no COMBINEFUNC is added (no partial aggregation promised).
  * Note. Generic comparison/sorting wrappers are UNSAFE for arbitrary user-defined types.
@@ -206,7 +206,7 @@ $f$  LANGUAGE SQL IMMUTABLE PARALLEL UNSAFE;
 
 -- https://stackoverflow.com/a/46849678
 -- https://www.postgresql.org/docs/current/release-14.html
-CREATE AGGREGATE array_cat_agg(anycompatiblearray) (
+CREATE OR REPLACE AGGREGATE array_cat_agg(anycompatiblearray) (
   SFUNC = array_cat,
   STYPE = anycompatiblearray,
   -- INITCOND = '{}',  nao desejado. Preferido retornar null para argumento null

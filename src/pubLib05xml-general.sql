@@ -11,7 +11,9 @@
 CREATE EXTENSION IF NOT EXISTS xml2;
 
 CREATE or replace FUNCTION xml_pretty(x xml,mode int DEFAULT 0)
-RETURNS xml as $f$
+RETURNS xml
+LANGUAGE SQL VOLATILE PARALLEL UNSAFE
+BEGIN ATOMIC
   -- requires xml2 pg extension
   -- https://postgres.cz/wiki/PostgreSQL_SQL_Tricks#Pretty_xml_formating
   select xslt_process($1::text,
@@ -38,8 +40,8 @@ $$
 </xsl:stylesheet>
 $$
 END
-)::xml
-$f$ language SQL immutable;
+)::xml;
+END;
 
 CREATE or replace FUNCTION xml_to_dec(text)
 RETURNS integer as $f$
@@ -49,7 +51,7 @@ begin
  execute E'select x\''||$1|| E'\'::integer' into r;
  return r;
 end
-$f$ language plpgsql immutable;
+$f$ language plpgsql immutable PARALLEL UNSAFE;
 
 CREATE or replace FUNCTION xml_unescape(xml)
 returns text as $f$
@@ -66,4 +68,4 @@ begin
   end loop;
   return rv;
 end
-$f$ language plpgsql immutable;
+$f$ language plpgsql immutable PARALLEL UNSAFE;

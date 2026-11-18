@@ -10,7 +10,7 @@ CREATE extension IF NOT EXISTS PLpython3u;  -- Python3 untrusted.
 CREATE or replace FUNCTION py3_return_version() RETURNS text AS $$
     import sys
     return sys.version
-$$ LANGUAGE plpython3u;
+$$ LANGUAGE plpython3u PARALLEL UNSAFE;
 -- SELECT * FROM ingest.py3_return_version();
 
 -- old unicode_normalize:
@@ -18,29 +18,29 @@ CREATE or replace FUNCTION str_to_normalized_unicode(str text) RETURNS text as $
   # check details at https://stackoverflow.com/questions/24863716
   import unicodedata
   return unicodedata.normalize('NFC', str.decode('UTF-8'))
-$f$ LANGUAGE PLpython3u STRICT IMMUTABLE;  -- need STRICT?
+$f$ LANGUAGE PLpython3u STRICT IMMUTABLE PARALLEL UNSAFE;  -- need STRICT?
 
 CREATE or replace FUNCTION yaml_to_jsonb(p_yaml text) RETURNS jsonb AS $f$
     import yaml
     import json
     return json.dumps( yaml.safe_load(p_yaml) )
-$f$ LANGUAGE PLpython3u IMMUTABLE;
+$f$ LANGUAGE PLpython3u IMMUTABLE PARALLEL UNSAFE;
 
 CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text) RETURNS text AS $f$
     import yaml
     return yaml.dump(yaml.load( p_jsonb ), allow_unicode=True)
-$f$ LANGUAGE PLpython3u IMMUTABLE;
+$f$ LANGUAGE PLpython3u IMMUTABLE PARALLEL UNSAFE;
 
 
 CREATE or replace FUNCTION jsonb_to_yaml(p_jsonb text, flow_style boolean) RETURNS text AS $f$
     import yaml
     return yaml.dump(yaml.load( p_jsonb ), allow_unicode=True, default_flow_style=flow_style)
-$f$ LANGUAGE PLpython3u IMMUTABLE;
+$f$ LANGUAGE PLpython3u IMMUTABLE PARALLEL UNSAFE;
 
 CREATE or replace FUNCTION file_exists(p_file text) RETURNS boolean AS $f$
     import os
     return os.path.isfile(p_file)
-$f$ LANGUAGE PLpython3u IMMUTABLE;
+$f$ LANGUAGE PLpython3u VOLATILE PARALLEL UNSAFE;
 
 -------
 
@@ -53,14 +53,16 @@ CREATE or replace FUNCTION jsonb_mustache_render(
   import json
   j = json.loads(i)
   return chevron.render(tpl,j,partials_path)
-$f$ LANGUAGE plpython3u IMMUTABLE;
+$f$ LANGUAGE plpython3u VOLATILE PARALLEL UNSAFE;
 -- SELECT jsonb_mustache_render('Hello, {{ mustache }}!', '{"mustache":"World"}'::jsonb);
 
 ----
 
-CREATE or replace FUNCTION yamlfile_to_jsonb(file text) RETURNS JSONb AS $wrap$
-  SELECT yaml_to_jsonb( pg_read_file(file) )
-$wrap$ LANGUAGE SQL IMMUTABLE;
+CREATE or replace FUNCTION yamlfile_to_jsonb(file text) RETURNS JSONb
+LANGUAGE SQL VOLATILE PARALLEL UNSAFE
+BEGIN ATOMIC
+  SELECT yaml_to_jsonb( pg_read_file(file) );
+END;
 
 -----
 
@@ -95,7 +97,7 @@ CREATE or replace FUNCTION hcodes_common_prefix(
     pre = a[0][0: i]
     return pre
   
-$f$ language PLpython3u IMMUTABLE;
+$f$ language PLpython3u IMMUTABLE PARALLEL UNSAFE;
 COMMENT ON FUNCTION hcodes_common_prefix(text[])
   IS 'Longest Common Prefix of a set of hcodes, sorting array'
 ;
