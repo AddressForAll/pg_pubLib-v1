@@ -8,7 +8,7 @@
 CREATE extension IF NOT EXISTS adminpack;  -- for pg_file_write
 
 CREATE or replace FUNCTION pg_relation_lines(p_tablename text)
-RETURNS bigint LANGUAGE 'plpgsql' AS $f$
+RETURNS bigint LANGUAGE 'plpgsql' VOLATILE PARALLEL UNSAFE AS $f$
   DECLARE
     lines bigint;
   BEGIN
@@ -28,20 +28,24 @@ CREATE or replace FUNCTION volat_file_write(
   fcontent text,
   msg text DEFAULT 'Ok',
   append boolean DEFAULT false
-) RETURNS text AS $f$
+) RETURNS text
+LANGUAGE SQL VOLATILE PARALLEL UNSAFE
+BEGIN ATOMIC
   SELECT pg_catalog.pg_file_unlink(file);
   -- solves de PostgreSQL problem of the "LAZY COALESCE", as https://stackoverflow.com/a/42405837/287948
   SELECT msg ||'. Content bytes '|| CASE WHEN append THEN 'appended:' ELSE 'writed:' END
          ||  pg_catalog.pg_file_write(file,fcontent,append)::text
-         || E'\nSee '|| file
-$f$ language SQL volatile;
+         || E'\nSee '|| file;
+END;
 COMMENT ON FUNCTION volat_file_write
   IS 'Do lazy coalesce. To use in a "only write when null" condiction of COALESCE(x,volat_file_write()).'
 ;
 
 CREATE or replace FUNCTION pg_tablestruct_dump_totext(
   p_tabname text, p_ignore text[] DEFAULT NULL, p_add text[] DEFAULT NULL
-) RETURNS text[]  AS $f$
+) RETURNS text[]
+LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
   SELECT array_agg(col||' '||datatype) || COALESCE(p_add,array[]::text[])
   FROM (
     SELECT -- attrelid::regclass AS tbl,
@@ -53,8 +57,8 @@ CREATE or replace FUNCTION pg_tablestruct_dump_totext(
     AND    NOT attisdropped
     AND    ( p_ignore IS null OR NOT(attname=ANY(p_ignore)) )
     ORDER  BY attnum
-  ) t
-$f$ language SQL IMMUTABLE;
+  ) t;
+END;
 COMMENT ON FUNCTION pg_tablestruct_dump_totext
   IS 'Extraxcts column descriptors of a table. Used in ingest.fdw_generate_getclone() function. Optional adds to the end.'
 ;
@@ -64,15 +68,17 @@ CREATE or replace FUNCTION jsonb_pg_stat_file(
   add_md5 boolean DEFAULT false,
   -- add_filename  boolean DEFAULT true,
   missing_ok boolean DEFAULT false
-) RETURNS JSONb AS $f$
+) RETURNS JSONb
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
   -- = indest.get_file_meta(). Falta emitir erro quando file not found!
   -- usar (j->'size')::bigint+1 como pg_read(size)!  para poder usar missing nele.
   SELECT j
          || jsonb_build_object( 'file',f )
          || CASE WHEN add_md5 THEN jsonb_build_object( 'hash_md5', md5(pg_read_binary_file(f,0,900000000)) ) ELSE '{}'::jsonb END
   FROM to_jsonb( pg_stat_file(f,missing_ok) ) t(j)
-  WHERE j IS NOT NULL
-$f$ LANGUAGE SQL IMMUTABLE;
+  WHERE j IS NOT NULL;
+END;
 COMMENT ON FUNCTION jsonb_pg_stat_file
   IS 'Convert pg_stat_file() information in JSONb, adding option to include MD5 digest and filename.'
 ;
@@ -82,7 +88,9 @@ COMMENT ON FUNCTION jsonb_pg_stat_file
 
 CREATE or replace FUNCTION rel_columns(
  p_relname text, p_schemaname text DEFAULT NULL
-) RETURNS text[] AS $f$
+) RETURNS text[]
+LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
    SELECT --attrelid::regclass AS tbl,  atttypid::regtype  AS datatype
         array_agg(attname::text ORDER  BY attnum)
    FROM   pg_attribute
@@ -92,19 +100,23 @@ CREATE or replace FUNCTION rel_columns(
              ELSE $2||'.'||$1
           END)::regclass
    AND    attnum > 0
-   AND    NOT attisdropped
-$f$ LANGUAGE SQL;
+   AND    NOT attisdropped;
+END;
 
-CREATE or replace FUNCTION sql_parse_selectcols_simple(s text) RETURNS text AS $f$
+CREATE or replace FUNCTION sql_parse_selectcols_simple(s text) RETURNS text
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
    SELECT CASE
        WHEN $1 IS NULL OR p[1]='' OR array_length(p,1)>2 THEN NULL
        WHEN array_length(p,1)=1 THEN p[1]
        ELSE p[1] ||' AS '||p[2]
        END
-   FROM (SELECT regexp_split_to_array(trim($1),'\s+') p) t
-$f$ LANGUAGE SQL;
+   FROM (SELECT regexp_split_to_array(trim($1),'\s+') p) t;
+END;
 
-CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] AS $f$
+CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[]
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
    SELECT array_agg( CASE
       WHEN $1 IS NULL OR p_as IS NULL OR array_length(p_as,1)=0 OR array_length(p_as,1)>2 THEN NULL
       WHEN array_length(p_as,1)=2 THEN p_as[1] ||' AS '||p_as[2]
@@ -113,8 +125,8 @@ CREATE or replace FUNCTION sql_parse_selectcols(selcols text[]) RETURNS text[] A
    FROM (
     SELECT regexp_split_to_array(x, '\s+as\s+','i') p_as
     FROM UNNEST($1) t1(x)
-   ) t2
-$f$ LANGUAGE SQL;
+   ) t2;
+END;
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 -- Documentation helper functions (doc_ prefix)
@@ -134,7 +146,8 @@ CREATE or replace FUNCTION doc_UDF_show(
   definition text,
   prokind text,
   comment text
-) AS $f$
+) LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
   SELECT
     pg_proc.oid,
     pg_namespace.nspname::text,
@@ -167,8 +180,8 @@ CREATE or replace FUNCTION doc_UDF_show(
               CASE WHEN position('%' in p_name_notlike)>0 THEN NOT(pg_proc.proname::text iLIKE p_name_notlike)
               ELSE NOT(pg_proc.proname::text ~* p_name_notlike) END
             )
-        AND (p_oid IS NULL OR pg_proc.oid=p_oid)
-$f$ LANGUAGE SQL IMMUTABLE;
+        AND (p_oid IS NULL OR pg_proc.oid=p_oid);
+END;
 COMMENT ON FUNCTION doc_UDF_show
   IS 'Show all information about an User Defined Function (UDF), by its OID, or listing all functions by LIKE filter.'
 ;
@@ -184,7 +197,8 @@ CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
   schema_name information_schema.sql_identifier,
   name information_schema.sql_identifier,
   arguments_simplified information_schema.character_data[]
-) AS $f$
+) LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
   SELECT substring(routines.specific_name::text from '[^_]+$'),
          routines.specific_schema, routines.routine_name,
          array_agg(parameters.data_type ORDER BY parameters.ordinal_position) as simplified_signature
@@ -202,8 +216,8 @@ CREATE or replace FUNCTION doc_UDF_show_simplified_signature(
               ELSE NOT(routines.routine_name::text ~* p_name_notlike) END
             )
   GROUP BY routines.specific_name, 2, 3
-  ORDER BY routines.routine_name, routines.specific_name
-$f$ LANGUAGE SQL IMMUTABLE;
+  ORDER BY routines.routine_name, routines.specific_name;
+END;
 COMMENT ON FUNCTION doc_UDF_show_simplified_signature
   IS 'Show name and simplified argument list about an User Defined Function (UDF), by its name or listing all functions by LIKE filter. Useful for namespace analyses'
 ;
@@ -213,9 +227,11 @@ COMMENT ON FUNCTION doc_UDF_show_simplified_signature
 CREATE or replace FUNCTION doc_UDF_transparent_id(
   name_expression text,
   md5_digits int DEFAULT 6   -- good for ~5000 items or less. Not need more items in a limited-scope documentation.
-) RETURNS text AS $f$
-  SELECT substr( md5(lower(name_expression)), 1, md5_digits)
-$f$ LANGUAGE SQL IMMUTABLE;
+) RETURNS text
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT substr( md5(lower(name_expression)), 1, md5_digits);
+END;
 COMMENT ON FUNCTION doc_UDF_transparent_id(text,int)
   IS 'Offers a public eternal identifier for a function, important to JOINS in the documentation schema.'
 ;
@@ -226,9 +242,11 @@ CREATE or replace FUNCTION doc_UDF_transparent_id(
   name text,
   arguments_simplified text[],
   md5_digits int DEFAULT 6   -- good for ~5000 items or less. Not need more items in a limited-scope documentation.
-) RETURNS text AS $f$
-  SELECT doc_UDF_transparent_id( schema_name||'.'||name||'('||array_to_string(arguments_simplified,',')||')', md5_digits)
-$f$ LANGUAGE SQL IMMUTABLE;
+) RETURNS text
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT doc_UDF_transparent_id( schema_name||'.'||name||'('||array_to_string(arguments_simplified,',')||')', md5_digits);
+END;
 COMMENT ON FUNCTION doc_UDF_transparent_id(text,text,text[],int)
   IS 'Prepare the standard parameters for doc_UDF_transparent_id().'
 ;
@@ -238,9 +256,11 @@ CREATE or replace FUNCTION doc_UDF_transparent_id(
   name text,
   arguments_simplified text[],
   md5_digits int DEFAULT 6
-) RETURNS text AS $wrap$
+) RETURNS text
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT doc_UDF_transparent_id('public',$1,$2,$3);
-$wrap$ LANGUAGE SQL IMMUTABLE;
+END;
 COMMENT ON FUNCTION doc_UDF_transparent_id(text,text[],int)
   IS 'Prepare parameters for doc_UDF_transparent_id().'
 ;
@@ -264,7 +284,8 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
   return_type text,
   prokind text,
   comment text
-) AS $f$
+) LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
   SELECT doc_UDF_transparent_id(u.schema_name, u.name::text, s.arguments_simplified::text[]) AS id,
          u.oid, u.schema_name, u.name::text,
          u.language, md5(u.definition),
@@ -272,8 +293,8 @@ CREATE or replace FUNCTION doc_UDF_show_simple(
          u.arguments::text AS arguments,
          u.return_type, u.prokind, u.comment
   FROM doc_UDF_show_simplified_signature($1,$2,$3) s
-        INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid::oid=u.oid
-$f$ LANGUAGE SQL IMMUTABLE;
+        INNER JOIN doc_UDF_show($1,$2,$3,$4) u ON s.oid::oid=u.oid;
+END;
 -- SELECT * FROM doc_UDF_show_simple('','%geohash%','st_%');
 
 -------
@@ -286,7 +307,8 @@ CREATE or replace FUNCTION table_disk_usage(
   relkind char,
   "size" text,
   size_bytes bigint
-) AS $f$
+) LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
 SELECT
   schema_name, relname,relkind,
   pg_size_pretty(table_size) AS size,
@@ -303,8 +325,8 @@ FROM (
      ) t
 WHERE (p_schema_name IS NULL OR schema_name=p_schema_name)
       AND (p_name_like IS NULL OR relname LIKE ('%'||p_name_like||'%'))
-ORDER BY table_size DESC
-$f$ LANGUAGE SQL IMMUTABLE;
+ORDER BY table_size DESC;
+END;
 -- SELECT * FROM table_disk_usage();
 -- SELECT * FROM table_disk_usage(null,'tmp') WHERE schema_name IN ('public','test');
 
@@ -313,14 +335,16 @@ $f$ LANGUAGE SQL IMMUTABLE;
 CREATE OR REPLACE FUNCTION doc_generate_mediawiki(
   p_schema_name text DEFAULT NULL,
   p_name_like text DEFAULT NULL
-) RETURNS text AS $f$
+) RETURNS text
+LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
   SELECT string_agg(
     format(E'== %s ==\n* Descrição: %s\n* Retorno: \'\'%s\'\'\n* Assinatura: <nowiki>%s</nowiki>\n', 
            name, comment, return_type, arguments), 
     E'\n'
   )
   FROM doc_UDF_show_simple(p_schema_name, p_name_like);
-$f$ LANGUAGE SQL;
+END;
 -- SELECT doc_generate_mediawiki('public', '%geohash%');
 -- SELECT doc_generate_mediawiki(NULL, '%geohash%');
 
@@ -328,7 +352,9 @@ $f$ LANGUAGE SQL;
 CREATE OR REPLACE FUNCTION doc_generate_mediawiki_tables_detailed(
   p_schema_name text DEFAULT NULL,
   p_table_like text DEFAULT NULL
-) RETURNS text AS $f$
+) RETURNS text
+LANGUAGE SQL STABLE PARALLEL RESTRICTED
+BEGIN ATOMIC
   SELECT string_agg(
     format(
       E'== %I.%I ==\n* Tipo: tabela\n* Descrição: %s\n* Colunas:\n%s\n',
@@ -376,8 +402,8 @@ CREATE OR REPLACE FUNCTION doc_generate_mediawiki_tables_detailed(
       AND (p_schema_name IS NULL OR c.table_schema = p_schema_name)
       AND (p_table_like IS NULL OR c.table_name ILIKE ('%' || p_table_like || '%'))
     GROUP BY c.table_schema, c.table_name, cls.oid
-  ) t
-$f$ LANGUAGE SQL STABLE;
+  ) t;
+END;
 COMMENT ON FUNCTION doc_generate_mediawiki_tables_detailed(text,text)
   IS 'Generate detailed MediaWiki documentation for tables, including table comments and per-column comments.'
 ;

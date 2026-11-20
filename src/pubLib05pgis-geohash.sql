@@ -14,10 +14,12 @@
 
 CREATE or replace FUNCTION geohash_GeomsFromPrefix(
   prefix text DEFAULT ''
-) RETURNS TABLE(ghs text, geom geometry) AS $f$
+) RETURNS TABLE(ghs text, geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT prefix||x, ST_SetSRID( ST_GeomFromGeoHash(prefix||x), 4326)
-  FROM unnest('{0,1,2,3,4,5,6,7,8,9,b,c,d,e,f,g,h,j,k,m,n,p,q,r,s,t,u,v,w,x,y,z}'::text[]) t(x)
-$f$ LANGUAGE SQL IMMUTABLE;
+  FROM unnest('{0,1,2,3,4,5,6,7,8,9,b,c,d,e,f,g,h,j,k,m,n,p,q,r,s,t,u,v,w,x,y,z}'::text[]) t(x);
+END;
 COMMENT ON FUNCTION geohash_GeomsFromPrefix
   IS 'Return a Geohash grid, the quadrilateral geometry of each child-cell and its geocode. The parameter is the Geohash the parent-cell, that will be a prefix for all child-cells.'
 ;
@@ -59,7 +61,9 @@ CREATE or replace FUNCTION geohash_cover_geoms(
   input_prefix text     DEFAULT '',
   onlycontained boolean DEFAULT false,  -- true=interior cells; false=contour cells; NULL=both.
   force_scan boolean    DEFAULT true    -- BUG? necessary?
-) RETURNS TABLE(ghs text, is_contained boolean, geom geometry, cut_geom geometry)  AS $f$
+) RETURNS TABLE(ghs text, is_contained boolean, geom geometry, cut_geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   WITH t0 AS (
     SELECT ghs0,
            ghs0>'' AND (NOT(force_scan) OR input_prefix!=ghs0) AS test0,
@@ -85,8 +89,8 @@ CREATE or replace FUNCTION geohash_cover_geoms(
    ) t2
    WHERE must_both
          OR ( NOT(must_contained) AND NOT(is_contained) )
-         OR ( must_contained AND is_contained )
-$f$ LANGUAGE SQL IMMUTABLE;
+         OR ( must_contained AND is_contained );
+END;
 COMMENT ON FUNCTION geohash_cover_geoms
   IS 'Geometry of geohash_cover() list, assuming a region delimited by the prefix.'
 ;
@@ -97,10 +101,12 @@ CREATE or replace FUNCTION geohash_cover_list(
   input_prefix text  DEFAULT '',       -- Geohash prefix to enforce only equal or contained cells
   onlycontained boolean DEFAULT NULL,  -- true=interior cells; false=contour cells; NULL=both.
   force_scan boolean DEFAULT true      -- rare use, on non-recusive context
-) RETURNS text[] AS $wrap$
+) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT array_agg(ghs)
-  FROM geohash_cover_geoms($1,$2,$3,$4)
-$wrap$ LANGUAGE SQL IMMUTABLE;
+  FROM geohash_cover_geoms($1,$2,$3,$4);
+END;
 COMMENT ON FUNCTION geohash_cover_list
   IS 'Geohash list of covering Geohashes, assuming a region delimited by the prefix. Returns null for incompatible prefixes, and 32 itens from prefix-contained geometry.'
 ;
@@ -110,10 +116,12 @@ CREATE or replace FUNCTION geohash_cover_testlist(
   input_geom geometry,
   input_prefix text DEFAULT '',
   force_scan boolean DEFAULT true
-) RETURNS jsonb AS $wrap$
+) RETURNS jsonb
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT jsonb_object_agg(ghs,is_contained)
-  FROM geohash_cover_geoms(input_geom, input_prefix, NULL, force_scan)
-$wrap$ LANGUAGE SQL IMMUTABLE;
+  FROM geohash_cover_geoms(input_geom, input_prefix, NULL, force_scan);
+END;
 COMMENT ON FUNCTION geohash_cover_testlist
   IS 'Geohash jsonb object (geocode-is_contained pairs) of covering Geohashes, a wrap for geohash_cover_geoms function.'
 ;
@@ -123,7 +131,9 @@ CREATE or replace FUNCTION geohash_coverContour_geoms(
   input_geom geometry,
   ghs_len int default 3,
   prefix0 text DEFAULT ''
-) RETURNS TABLE(ghs text, geom geometry, cut_geom geometry) AS $f$
+) RETURNS TABLE(ghs text, geom geometry, cut_geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
 
  WITH RECURSIVE rcover(ghs, is_contained, geom, cut_geom) AS (
    SELECT *
@@ -137,7 +147,7 @@ CREATE or replace FUNCTION geohash_coverContour_geoms(
  SELECT ghs,geom,cut_geom
  FROM rcover WHERE length(ghs)=ghs_len;
 
-$f$ LANGUAGE SQL IMMUTABLE;
+END;
 COMMENT ON FUNCTION geohash_coverContour_geoms
   IS 'Geohash cover of the contour.'
 ;
@@ -148,7 +158,9 @@ CREATE or replace FUNCTION geohash_coverContour_geoms_splitarea(
   ghs_len int default 3,
   max_area_factor float default 0.8,
   prefix0 text default ''
-) RETURNS TABLE(ghs text, geom geometry, cut_geom geometry, area_factor float) AS $f$
+) RETURNS TABLE(ghs text, geom geometry, cut_geom geometry, area_factor float)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   WITH rcover_area AS (
     SELECT *, ST_Area(cut_geom)/ST_Area(geom) AS k
     FROM geohash_coverContour_geoms($1,$2,prefix0) -- all recurrency steps here.
@@ -159,13 +171,15 @@ CREATE or replace FUNCTION geohash_coverContour_geoms_splitarea(
   UNION ALL  -- More one recurrency step for big area_factor cells:
    SELECT g.ghs, g.geom, g.cut_geom, ST_Area(g.cut_geom)/ST_Area(g.geom)
    FROM rcover_area r, LATERAL geohash_cover_geoms(input_geom, ghs, false) g
-   WHERE r.k >= max_area_factor
-$f$ LANGUAGE SQL IMMUTABLE;
+   WHERE r.k >= max_area_factor;
+END;
 
 -------------
 
 CREATE or replace FUNCTION geohash_GeomsMosaic(ghs_array text[], geom_mask geometry DEFAULT null)
-RETURNS TABLE(ghs text, lghs int, geom geometry) AS $f$
+RETURNS TABLE(ghs text, lghs int, geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   WITH ghsgeom AS (
     SELECT ghs, length(ghs) as lghs,
            ST_SetSRID( ST_GeomFromGeoHash(ghs) , 4326) AS geom
@@ -183,27 +197,31 @@ RETURNS TABLE(ghs text, lghs int, geom geometry) AS $f$
   )
     SELECT  ghs, lghs,
             CASE WHEN geom_mask IS NULL THEN geom ELSE ST_Intersection(geom,geom_mask) END
-    FROM final
-$f$ LANGUAGE SQL IMMUTABLE;
+    FROM final;
+END;
 COMMENT ON FUNCTION geohash_GeomsMosaic(text[],geometry)
   IS 'Return a mosaic the geometries of an arbitrary set of Geohashes, cuting, when exists, contained cells from its parent-cell.'
 ;
 -- SELECT geohash_GeomMosaic(array['7h2','7h2w','7h2wju','7h2wjv','7h2wjx','7h2wjy','7h2wjz','7h2wjz', '6urz']);
 
 CREATE or replace FUNCTION geohash_GeomsMosaic(ghs_set jsonB, geom_mask geometry DEFAULT null)
-RETURNS TABLE(ghs text, lghs int, val text, geom geometry) AS $wrap$
+RETURNS TABLE(ghs text, lghs int, val text, geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT ghs, lghs, ghs_set->>ghs AS val, geom
   FROM (
     SELECT * FROM geohash_GeomsMosaic( (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k)), geom_mask )
-  ) t
-$wrap$ LANGUAGE SQL IMMUTABLE;
+  ) t;
+END;
 COMMENT ON FUNCTION geohash_GeomsMosaic(jsonb,geometry)
   IS 'Wrap for geohash_GeomsMosaic(text[]), adding a val column of text-type from input key-value pairs.'
 ;
 -- SELECT * FROM geohash_GeomsMosaic('{"7h2":100,"7h2w":200,"7h2wju":150,"7h2wjv":200,"7h2wjx":30,"6urz":110}'::jsonb);
 
 CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(ghs_set jsonB, geom_mask geometry DEFAULT null)
-RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
+RETURNS TABLE(ghs text, info jsonb, geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT ghs,
          CASE jsonb_typeof(ghs_set->ghs)
             WHEN 'null' THEN jsonb_build_object('ghs_len',lghs)
@@ -211,8 +229,8 @@ RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
             ELSE jsonb_build_object('ghs_len',lghs, 'ghs_items',ghs_set->ghs)
          END,
          geom
-  FROM geohash_GeomsMosaic(  (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k)),  geom_mask   )
-$wrap$ LANGUAGE SQL IMMUTABLE;
+  FROM geohash_GeomsMosaic(  (SELECT array_agg(k) FROM jsonb_object_keys(ghs_set) t(k)),  geom_mask   );
+END;
 COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,geometry)
   IS 'Wrap for geohash_GeomMosaic(text[]), adding a val column of jsonb-type from input key-value pairs.'
 ;
@@ -224,7 +242,9 @@ CREATE or replace FUNCTION geohash_GeomsMosaic_jinfo(
     geom_mask geometry DEFAULT null,
     minimal_area float DEFAULT 1.0 -- precision of point and geohash-cell are not superior than 1 m2.
 )
-RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
+RETURNS TABLE(ghs text, info jsonb, geom geometry)
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT ghs
          ,info || COALESCE(
             (SELECT jsonb_object_agg(
@@ -242,8 +262,8 @@ RETURNS TABLE(ghs text, info jsonb, geom geometry) AS $wrap$
          ) -- \coalesce
          ,geom
   FROM geohash_GeomsMosaic_jinfo(ghs_set,geom_mask), LATERAL (SELECT ST_Area(geom,true)) l(area)
-  WHERE l.area>minimal_area
-$wrap$ LANGUAGE SQL IMMUTABLE;
+  WHERE l.area>minimal_area;
+END;
 COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB,geometry,float)
   IS 'Wrap for geohash_GeomsMosaic_jinfo, adding optional area and density values'
 ;
@@ -251,7 +271,9 @@ COMMENT ON FUNCTION geohash_GeomsMosaic_jinfo(jsonb,jsonB,geometry,float)
 
 ---
 
-CREATE or replace FUNCTION geohash_neighbors_brute(hash text) RETURNS text[] AS $f$
+CREATE or replace FUNCTION geohash_neighbors_brute(hash text) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
  SELECT
   array_agg(ST_GeoHash(
     ST_MakePoint(px, py),
@@ -266,8 +288,8 @@ CREATE or replace FUNCTION geohash_neighbors_brute(hash text) RETURNS text[] AS 
   LATERAL CAST(ST_Y(pt) + y*180.0/(2^FLOOR(len / 2.0)*4^len) AS FLOAT) AS py
  WHERE NOT (x = 0 AND y = 0)
        AND NOT (px < -180.0 OR px > 180.0)
-       AND NOT (py < -90.0 OR py > 90.0)
-$f$ LANGUAGE SQL IMMUTABLE;
+       AND NOT (py < -90.0 OR py > 90.0);
+END;
 COMMENT ON FUNCTION geohash_neighbors_brute(text)
   IS 'Obtains Geohash neighbors by a brute-force algorithm. With erros, see https://gis.stackexchange.com/a/431410/7505'
 ;
@@ -302,21 +324,25 @@ CREATE or replace FUNCTION geohash_adjacent(
            ) t0
        ) prepare
     ) t2
-$f$ LANGUAGE SQL IMMUTABLE;
+$f$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 COMMENT ON FUNCTION geohash_adjacent(text,int)
   IS 'Optimizing.'
 ;
 CREATE or replace FUNCTION geohash_adjacent(
   geohash text,    -- Cell to which adjacent cell is required.
   direction text   -- Direction from geohash 1234 as (N/S/E/W).
-) RETURNS text AS $wrap$
-  SELECT geohash_adjacent(geohash,translate(lower(direction),'nsew','1234')::int)
-$wrap$ LANGUAGE SQL IMMUTABLE;
+) RETURNS text
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT geohash_adjacent(geohash,translate(lower(direction),'nsew','1234')::int);
+END;
 COMMENT ON FUNCTION geohash_adjacent(text,text)
   IS 'wrap for geohash_adjacent(text,int).'
 ;
 
-CREATE or replace FUNCTION geohash_neighbours(geohash text) RETURNS text[] AS $f$
+CREATE or replace FUNCTION geohash_neighbours(geohash text) RETURNS text[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT array[
     geohash_adjacent(geohash, 1),                      -- N
     geohash_adjacent(geohash_adjacent(geohash, 1), 3), -- NE
@@ -326,8 +352,8 @@ CREATE or replace FUNCTION geohash_neighbours(geohash text) RETURNS text[] AS $f
     geohash_adjacent(geohash_adjacent(geohash, 2), 4), -- SW
     geohash_adjacent(geohash, 4),                      -- W
     geohash_adjacent(geohash_adjacent(geohash, 1), 4)  -- NW
-  ]
-$f$ LANGUAGE SQL IMMUTABLE;
+  ];
+END;
 
 
 -- to test LATERAL PERFORMANCE:
@@ -351,4 +377,4 @@ CREATE or replace FUNCTION geohash_adjacent2(
                    THEN geohash_adjacent2(parent1, direction) -- PERFORMANCE PROBLEM, need repeat your-senf once.
               ELSE parent1
               END as text) AS parent
-$f$ LANGUAGE SQL IMMUTABLE;
+$f$ LANGUAGE SQL IMMUTABLE PARALLEL UNSAFE;

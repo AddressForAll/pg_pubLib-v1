@@ -1,3 +1,9 @@
+## Requirements for v0.2
+
+PostgreSQL **14+** is required for SQL-standard function bodies (`BEGIN ATOMIC`)
+and the compatible polymorphic array signatures used by aggregates.
+See [migration notes](migration-v0.2.md) for exceptions and validation commands.
+
 Edit makefile of your project to run each `psql $(pg_uri)/$(pg_db) < pubLib$(i).sql` in the correct order. For example any `pubLib02-*.sql` must run before `pubLib03-*.sql`, but same order like `pubLib03-admin.sql` and `pubLib03-json.sql` can be run in any order &mdash; by convention we adopt the alphabetic order, so use the `ls pubLib*.sql` order.
 
 RECOMMENDATION: to install (in a database) only the used modules.
@@ -21,7 +27,7 @@ graph LR
 
 ## Installing all library
 
-Use `make instAll` to install all scripts, or install at database *db* a specific one like *array*,
+Use `make all` to install all scripts, or install at database *db* a specific one like *array*,
 
 ```sh
 psql postgres://postgres@localhost/db < pubLib01-array.sql
@@ -32,7 +38,7 @@ SQL scripts of [`/src`](../src) with *pgis* (file named `pubLib{depLevel}pgis-{n
 ## py dependences
 All Python functions are standard Python3, and need  PLpython3 untrusted module:
 ```sh
-sudo apt install  postgresql-plpython3-13
+sudo apt install  postgresql-plpython3-14
 ```
 
 Special modules need some install procedures by *pip*, but to be visible at postgreSQL need `sudo pip`  and `unmask` for permission. Example with Mustasche template Chevron module:

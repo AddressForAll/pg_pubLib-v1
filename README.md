@@ -10,6 +10,12 @@ PubLib is also a [Library of Snippets](https://wiki.postgresql.org/wiki/Category
 implementating small and frequently used functions.
 Typical  "small function" are also [IMMUTABLE](https://www.postgresql.org/docs/current/xfunc-volatility.html) ones.
 
+## Version 0.2 (unreleased)
+
+Requires **PostgreSQL 14 or newer**. Eligible SQL functions use `BEGIN ATOMIC`;
+parallel safety is declared explicitly, with documented exceptions.
+See [v0.2 migration notes](docs/migration-v0.2.md) before updating an existing installation.
+
 ## Usage recomendation
 
 Your project not need to copy all source-code of this *git*. Select only the SQL files (group of functions) that your project need, maintaining it updated to be compatible with newer ones. If this *git* is updated, you can update also your subset of selected functions.  

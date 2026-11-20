@@ -46,9 +46,11 @@
 -- -- -- -- -- -- -- -- -- --
 -- Wrap and helper functions:
 
-CREATE OR REPLACE FUNCTION str_geouri_decode(uri TEXT) RETURNS float[] AS $f$
-  SELECT regexp_match(uri,'^geo:(?:olc:|ghs:)?([-0-9\.]+),([-0-9\.]+)(?:,([-0-9\.]+))?(?:;u=([-0-9\.]+))?','i')::float[]
-$f$ LANGUAGE SQL IMMUTABLE;
+CREATE OR REPLACE FUNCTION str_geouri_decode(uri TEXT) RETURNS float[]
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
+  SELECT regexp_match(uri,'^geo:(?:olc:|ghs:)?([-0-9\.]+),([-0-9\.]+)(?:,([-0-9\.]+))?(?:;u=([-0-9\.]+))?','i')::float[];
+END;
 COMMENT ON FUNCTION str_geouri_decode(text)
   IS 'Decodes standard GeoURI of latitude and longitude into float array.'
 ;

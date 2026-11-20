@@ -10,16 +10,19 @@ CREATE extension IF NOT EXISTS postgis;
 CREATE or replace FUNCTION geojson_readfile_headers(
     f text,   -- absolute path and filename
     missing_ok boolean DEFAULT false -- an error is raised, else (if true), the function returns NULL when file not found.
-) RETURNS JSONb AS $f$
+) RETURNS JSONb
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
   SELECT j || jsonb_build_object( 'file',f,  'content_header', pg_read_file(f)::JSONB - 'features' )
   FROM to_jsonb( pg_stat_file(f,missing_ok) ) t(j)
-  WHERE j IS NOT NULL
-$f$ LANGUAGE SQL;
+  WHERE j IS NOT NULL;
+END;
 
 
 CREATE or replace FUNCTION geojson_readfile_features_jgeom(file text, file_id int default null) RETURNS TABLE (
   file_id int, feature_id int, feature_type text, properties jsonb, jgeom jsonb
-) AS $f$
+) LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
    SELECT file_id, (ROW_NUMBER() OVER())::int AS subfeature_id,
           subfeature->>'type' AS subfeature_type,
           subfeature->'properties' AS properties,
@@ -29,8 +32,8 @@ CREATE or replace FUNCTION geojson_readfile_features_jgeom(file text, file_id in
              jsonb_objslice('crs',j) AS crs,
              jsonb_array_elements(j->'features') AS subfeature
       FROM ( SELECT pg_read_file(file)::JSONb AS j ) jfile
-   ) t2
-$f$ LANGUAGE SQL;
+   ) t2;
+END;
 COMMENT ON FUNCTION geojson_readfile_features_jgeom(text,int)
   IS 'Reads a big GeoJSON file and transforms it into a table with a json-geometry column.'
 ;
@@ -39,7 +42,8 @@ COMMENT ON FUNCTION geojson_readfile_features_jgeom(text,int)
 CREATE or replace FUNCTION geojson_readfile_features(f text) RETURNS TABLE (
   fname text, feature_id int, geojson_type text,
   feature_type text, properties jsonb, geom geometry
-) AS $f$
+) LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
    SELECT fname, (ROW_NUMBER() OVER())::int, -- feature_id,
           geojson_type, feature->>'type',    -- feature_type,
           jsonb_objslice('name',feature) || feature->'properties', -- properties and name.
@@ -51,8 +55,8 @@ CREATE or replace FUNCTION geojson_readfile_features(f text) RETURNS TABLE (
              j->>'type' AS geojson_type,
              jsonb_array_elements(j->'features') AS feature
       FROM ( SELECT pg_read_file(f)::JSONb AS j ) jfile
-   ) t2
-$f$ LANGUAGE SQL;
+   ) t2;
+END;
 COMMENT ON FUNCTION geojson_readfile_features(text)
   IS 'Reads a small GeoJSON file and transforms it into a table with a geometry column.'
 ;
@@ -67,7 +71,9 @@ CREATE or replace FUNCTION ST_AsGeoJSONb( -- ST_AsGeoJSON_complete
   p_name text default null,
   p_title text default null,
   p_id_as_int boolean default false
-) RETURNS JSONb AS $f$
+) RETURNS JSONb
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+BEGIN ATOMIC
 -- Do ST_AsGeoJSON() adding id, crs, properties, name and title
   SELECT jsonb_build_object('type', 'Feature', 'geometry', ST_AsGeoJSON(p_geom,p_decimals,p_options)::jsonb)
        || CASE
@@ -80,8 +86,8 @@ CREATE or replace FUNCTION ST_AsGeoJSONb( -- ST_AsGeoJSON_complete
           ELSE jsonb_build_object('id',p_id)
           END
        || CASE WHEN p_name IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('name',p_name) END
-       || CASE WHEN p_title IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('title',p_title) END
-$f$ LANGUAGE SQL IMMUTABLE;
+       || CASE WHEN p_title IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('title',p_title) END;
+END;
 COMMENT ON FUNCTION ST_AsGeoJSONb IS $$
   Enhances ST_AsGeoJSON() PostGIS function.
   Use ST_AsGeoJSONb( geom, 6, 1, osm_id::text, stable.element_properties(osm_id) - 'name:' ).
@@ -104,7 +110,7 @@ CREATE or replace FUNCTION write_geoJSONb_Features(
   p_title text default null,
   p_id_as_int boolean default false
 )
-RETURNS text LANGUAGE 'plpgsql' AS $f$
+RETURNS text LANGUAGE 'plpgsql' VOLATILE PARALLEL UNSAFE AS $f$
   DECLARE
     msg text;
     sql_orderby text;
@@ -168,7 +174,9 @@ COMMENT ON FUNCTION write_geojsonb_Features
 CREATE or replace FUNCTION geojson_repretty(
     j text,  -- from  jsonb_pretty() 
     blocksize int DEFAULT 4   -- coordinates grouped in blocks
-) RETURNS text AS $f$
+) RETURNS text
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
  WITH pre AS (
  SELECT t.id,
         CASE WHEN substring(t.lin,1,3)='##[' THEN substring(t.lin,3) ELSE  t.lin END AS lin,
@@ -213,8 +221,8 @@ FROM (
 ) t6
 ) tg
 GROUP BY 1,2 ORDER BY 1 -- -- id6,sp,lin2
-) t7
-$f$ language SQL;
+) t7;
+END;
 COMMENT ON FUNCTION geojson_repretty(text,int)
   IS 'Alternative for jsonb_pretty() to return GeoJSON pretty and coordinates in compact form';
 -- select g.* from lixgeo t, LATERAL geojson_repretty(t.j) g;
@@ -222,17 +230,21 @@ COMMENT ON FUNCTION geojson_repretty(text,int)
 CREATE or replace FUNCTION geojson_repretty(
     j json,  -- from  jsonb_pretty() 
     blocksize int DEFAULT 4   -- coordinates grouped in blocks
-) RETURNS text AS $f$
+) RETURNS text
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
     SELECT geojson_repretty( $1::text, $2 );
-$f$ language SQL;
+END;
 COMMENT ON FUNCTION geojson_repretty(json,int)
   IS 'Wrap for geojson_repretty()';
 
 CREATE or replace FUNCTION geojson_repretty(
     j jsonB,  -- input
     blocksize int DEFAULT 4   -- coordinates grouped in blocks
-) RETURNS text AS $wrap$
+) RETURNS text
+LANGUAGE SQL VOLATILE PARALLEL SAFE
+BEGIN ATOMIC
     SELECT geojson_repretty( jsonb_pretty(j), blocksize );
-$wrap$ language SQL;
+END;
 COMMENT ON FUNCTION geojson_repretty(jsonB,int)
   IS 'Wrap for geojson_repretty(geojson_repretty())';
